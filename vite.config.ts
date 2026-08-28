@@ -39,5 +39,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 8001,
     strictPort: true,
+    proxy: {
+      '/tarkov-json': {
+        target: 'https://json.tarkov.dev',
+        changeOrigin: true,
+        rewrite: (proxyPath) => proxyPath.replace(/^\/tarkov-json/, ''),
+      },
+    },
   },
 });

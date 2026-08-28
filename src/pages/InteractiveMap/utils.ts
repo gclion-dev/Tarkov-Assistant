@@ -184,7 +184,8 @@ export const loots: any = {
 };
 
 export const getIconCDN = (iconName: string) => {
-  return `https://cdn.mahoutsukai.cn/uploads/tarkov/map-icons/${icons[iconName]}.png`;
+  const file = icons[iconName] || iconName;
+  return `./maps/interactive/${file}.png`;
 };
 
 export const getIconPath = (name: string) => {
@@ -365,12 +366,6 @@ export const mouseClickEvent = (props: MouseClickEvent) => {
   };
 };
 
-export const getLayer = (name: string, layers: InteractiveMap.Layer[]) => {
-  let layer;
-  layers.forEach((_layer) => {
-    if (_layer.name === name) {
-      layer = _layer;
-    }
-  });
-  return layer;
+export const getLayer = (name: string, layers: InteractiveMap.Layer[] = []) => {
+  return layers.find((layer) => layer.name === name);
 };

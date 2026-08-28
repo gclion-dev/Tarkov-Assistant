@@ -4,6 +4,7 @@ declare namespace InteractiveMap {
     tarkovDataId: string;
     name: string;
     normalizedName: string;
+    nameId?: string;
     wiki: string;
     description: string;
     enemies: string[];
@@ -16,6 +17,7 @@ declare namespace InteractiveMap {
     hazards: Hazard[];
     lootContainers: LootContainer[];
     stationaryWeapons: StationaryWeapon[];
+    lootLoose?: LootLoose[];
 
     key: string;
     tileSize: number;
@@ -28,7 +30,9 @@ declare namespace InteractiveMap {
     author: string;
     authorLink: string;
     svgPath: string;
-    tilePath: string;
+    svgLayer?: string;
+    svgBounds?: number[][];
+    tilePath?: string;
     layers?: Layer[];
     labels: Label[];
   }
@@ -69,7 +73,7 @@ declare namespace InteractiveMap {
 
   interface Lock {
     lockType: string;
-    key: {
+    key?: {
       id: string;
       name: string;
       normalizedName: string;
@@ -108,6 +112,31 @@ declare namespace InteractiveMap {
     position: Position;
   }
 
+  interface LootItem {
+    id: string;
+    name: string;
+    shortName: string;
+    image: string;
+    category: string;
+    categoryName: string;
+    categoryImage?: string;
+  }
+
+  interface LootLoose {
+    position: Position;
+    items?: LootItem[];
+    itemIds?: string[];
+  }
+
+  interface TaskZone {
+    id: string;
+    mapId: string;
+    position: Position;
+    outline: Position[];
+    top?: number;
+    bottom?: number;
+  }
+
   interface PossibleLocation {
     map: {
       id: string;
@@ -132,8 +161,9 @@ declare namespace InteractiveMap {
     extents: Extent[];
     name: string;
     show: boolean;
-    svgPath: string;
-    tilePath: string;
+    svgPath?: string;
+    svgLayer?: string;
+    tilePath?: string;
   }
 
   interface Label {
@@ -147,6 +177,7 @@ declare namespace InteractiveMap {
 
   interface Extent {
     height: number[];
+    bounds?: any;
   }
 
   interface Position2D {
@@ -236,4 +267,14 @@ declare namespace InteractiveMap {
 
   type QuickTools = 'marker' | 'draw' | 'eraser' | 'setting';
   type AdditionFunc = 'tradertimer';
+}
+
+declare module 'leaflet' {
+  interface MarkerOptions {
+    positionY?: number;
+  }
+
+  interface PolylineOptions {
+    positionY?: number;
+  }
 }

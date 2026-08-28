@@ -125,7 +125,13 @@ const Index = (
           </div>
         )}
         <div className="im-quicktools-list-hr" />
-        <div className="im-quicktools-list-item" onClick={() => setActiveModal('marker')}>
+        <div
+          className={classNames('im-quicktools-list-item', {
+            active: activeModal === 'marker',
+          })}
+          title="图层"
+          onClick={() => setActiveModal(activeModal === 'marker' ? undefined : 'marker')}
+        >
           <Icon type="icon-flag-fill" />
         </div>
         {(isMobile || resolution.width >= 420) && (
@@ -145,6 +151,7 @@ const Index = (
       <div
         className={classNames('im-quicktools-modal', {
           active: activeModal,
+          'is-layers': activeModal === 'marker',
         })}
         onMouseDown={handleCloseModal}
       >

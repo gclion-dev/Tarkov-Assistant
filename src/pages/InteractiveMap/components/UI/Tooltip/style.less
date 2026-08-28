@@ -12,9 +12,27 @@
   opacity: 0;
   pointer-events: none;
   transition: all 0.3s;
-  z-index: 6;
+  z-index: 10;
   &.active {
     opacity: 1;
+  }
+  .im-tooltip-title {
+    margin-bottom: 6px;
+    color: #9a8866;
+    font-weight: 600;
+  }
+  .im-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+  }
+  img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    background: #111;
+    border: 1px solid #2c2c2c;
   }
   &::after {
     content: '';

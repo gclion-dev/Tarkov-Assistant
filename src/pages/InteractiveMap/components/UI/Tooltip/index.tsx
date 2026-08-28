@@ -66,7 +66,11 @@ const Index = (props: TooltipProps) => {
       }}
       ref={tooltipRef}
     >
-      {typeof text === 'string' ? <span>{text}</span> : text}
+      {typeof text === 'string' ? (
+        <span dangerouslySetInnerHTML={{ __html: text }} />
+      ) : (
+        text
+      )}
     </div>
   );
 };

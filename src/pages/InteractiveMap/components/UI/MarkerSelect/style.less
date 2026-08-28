@@ -1,51 +1,87 @@
 .im-quicktools {
   &-modal {
     &-marker {
-      width: 320px;
+      width: 360px;
       max-width: calc(100% - 38px);
-      max-height: calc(100% - 192px);
-      margin: 0 16px;
+      max-height: calc(100% - 96px);
+      margin: 0;
       padding: 16px;
       border: 3px solid #2c2c2c;
       border-radius: 8px;
       background-color: #1c1c1c;
       overflow: auto;
+      pointer-events: auto;
       &-title {
-        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
         color: #ffffff;
         &:not(:first-child) {
-          margin-top: 24px;
+          margin-top: 20px;
+        }
+        button {
+          padding: 0;
+          border: none;
+          color: #9a8866;
+          font-size: 12px;
+          background: transparent;
+          cursor: pointer;
+          &:hover {
+            color: #ffffff;
+          }
         }
       }
       &-block {
-        margin-bottom: 16px;
+        margin-bottom: 8px;
         &-title {
-          margin-bottom: 16px;
+          margin-bottom: 8px;
           font-size: 12px;
           color: #888888;
         }
         &-list {
           display: flex;
           flex-wrap: wrap;
-          gap: 16px;
-          img {
-            display: inline-block;
-            width: 32px;
-            transition: all 0.3s;
-            cursor: pointer;
-            &:hover {
-              opacity: 0.6;
-            }
-            &:not(.active) {
-              filter: grayscale(1);
-            }
-            &.active {
-              filter: drop-shadow(0 0 3px #288828);
-            }
-          }
+          gap: 8px;
         }
         &:last-child {
-          margin-bottom: 8px;
+          margin-bottom: 0;
+        }
+      }
+      &-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        padding: 4px 10px 4px 4px;
+        border: 1px solid #2c2c2c;
+        border-radius: 16px;
+        color: #888888;
+        font-size: 12px;
+        background: #111111;
+        cursor: pointer;
+        img {
+          width: 22px;
+          height: 22px;
+          object-fit: contain;
+          filter: grayscale(1);
+        }
+        span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        &:hover {
+          border-color: #444444;
+          color: #cccccc;
+        }
+        &.active {
+          border-color: #288828;
+          color: #ffffff;
+          img {
+            filter: none;
+          }
         }
       }
     }

@@ -44,10 +44,16 @@
     opacity: 0;
     pointer-events: none;
     transition: all 0.3s;
-    z-index: 9;
+    z-index: 2000;
     &.active {
       opacity: 1;
       pointer-events: auto;
+    }
+    &.is-layers {
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: 72px 16px 16px;
+      background-color: transparent;
     }
   }
 }

@@ -6,20 +6,18 @@ import './style.less';
 
 interface RulerPositionProps {
   rulerPosition?: InteractiveMap.Position2D[];
-  image2realPos?: InteractiveMap.ImageTransformProps;
 }
 
 const Index = (props: RulerPositionProps) => {
-  const { rulerPosition, image2realPos } = props;
+  const { rulerPosition } = props;
 
   const length = useMemo(() => {
-    if (rulerPosition && image2realPos) {
-      const realPosition = rulerPosition.map((rp) => image2realPos.p(rp));
-      return calculateHypotenuse(realPosition[0], realPosition[1]);
+    if (rulerPosition) {
+      return calculateHypotenuse(rulerPosition[0], rulerPosition[1]);
     } else {
       return 0;
     }
-  }, [rulerPosition, image2realPos]);
+  }, [rulerPosition]);
 
   if (rulerPosition) {
     return (

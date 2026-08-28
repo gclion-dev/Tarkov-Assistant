@@ -8,12 +8,11 @@ import { useRecoilState } from 'recoil';
 import { message } from 'tilty-ui';
 import { UAParser } from 'ua-parser-js';
 
-import dataImap from '@/data/interactive_maps';
+import { loadInteractiveMaps, loadMapTasks, refreshInteractiveMaps, refreshMapTasks } from '@/data/loadMaps';
 import langState from '@/store/lang';
 import { tarkovGamePathResolve } from '@/utils/tarkov';
 
 import useI18N from '../../i18n';
-import Canvas from './components/Canvas';
 import AdditionFunc from './components/UI/AdditionFunc';
 import ContextMenu from './components/UI/ContextMenu';
 import Coordinate from './components/UI/Coordinate';
@@ -26,6 +25,7 @@ import RulerPosition from './components/UI/RulerPosition';
 import Title from './components/UI/Title';
 import Tooltip from './components/UI/Tooltip';
 import Warning from './components/UI/Warning';
+import LeafletMap from './leaflet/LeafletMap';
 import { getLayer } from './utils';
 
 import './style.less';
@@ -35,7 +35,6 @@ const Index = () => {
   const [activeMapId, setActiveMapId] = useState<string>();
   const [activeMap, setActiveMap] = useState<InteractiveMap.Data>();
   const [activeLayer, setActiveLayer] = useState<InteractiveMap.Layer>();
-  const [utils, setUtils] = useState<InteractiveMap.UtilProps>();
 
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [rulerPosition, setRulerPosition] = useState<InteractiveMap.Position2D[]>();
@@ -77,6 +76,12 @@ const Index = () => {
       defaultValue: [],
     },
   );
+  const [taskKeys, setTaskKeys] = useLocalStorageState<string[]>('im-taskLayers', {
+    defaultValue: [],
+  });
+  const [lootLooseKeys, setLootLooseKeys] = useLocalStorageState<string[]>('im-lootLooseKeys', {
+    defaultValue: [],
+  });
   const [mapInfoActive, setMapInfoActive] = useLocalStorageState<boolean>('im-mapInfoActive', {
     defaultValue: true,
   });
@@ -96,6 +101,7 @@ const Index = () => {
   });
 
   const [quickSearchShow, setQuickSearchShow] = useState(false);
+  const [mapTasks, setMapTasks] = useState(loadMapTasks);
 
   const [lang] = useRecoilState(langState);
 
@@ -159,6 +165,12 @@ const Index = () => {
   const parseRaidInfo = (log: InteractiveMap.RaidLogProps) => {
     setRaidInfo(log);
     toast.info(`载入战局信息: ${log.shortId}`);
+    const matched = mapList.find((map) => map.nameId === log.location);
+    if (matched) {
+      setActiveMapId(matched.id);
+      setActiveLayer(undefined);
+      return;
+    }
     switch (log.location) {
       case 'TarkovStreets':
         setActiveMapId('5714dc692459777137212e12');
@@ -208,6 +220,21 @@ const Index = () => {
         setActiveMapId('5704e3c2d2720bac5b8b4567');
         setActiveLayer(undefined);
         break;
+      case 'Terminal':
+      case 'terminal':
+        setActiveMapId(mapList.find((map) => map.normalizedName === 'terminal')?.id);
+        setActiveLayer(undefined);
+        break;
+      case 'Labyrinth':
+      case 'TheLabyrinth':
+        setActiveMapId(mapList.find((map) => map.normalizedName === 'the-labyrinth')?.id);
+        setActiveLayer(undefined);
+        break;
+      case 'Icebreaker':
+      case 'Ice_breaker':
+        setActiveMapId(mapList.find((map) => map.normalizedName === 'icebreaker')?.id);
+        setActiveLayer(undefined);
+        break;
       default:
         break;
     }
@@ -221,7 +248,11 @@ const Index = () => {
         const { itemCount, soldItem, buyerNickname } = systemData || {};
         const { data: _data } = items || {};
         if (soldItem) {
-          emitWithAck('/tarkov/v2/iMGetItemDetail', { id: soldItem, lang }).then(({ data }) => {
+          const emit = (window as any).emitWithAck;
+          if (typeof emit !== 'function') {
+            return;
+          }
+          emit('/tarkov/v2/iMGetItemDetail', { id: soldItem, lang }).then(({ data }: any) => {
             const receivedItems: string[] = [];
             _data.forEach((d: any) => {
               const { _tpl, upd } = d || {};
@@ -315,10 +346,6 @@ const Index = () => {
     setRulerPosition(_rulerPosition);
   };
 
-  const handleCallbackUtils = (_utils: InteractiveMap.UtilProps) => {
-    setUtils(_utils);
-  };
-
   const handleExtractsChange = (_extracts: InteractiveMap.Faction[]) => {
     setExtracts(_extracts);
   };
@@ -341,6 +368,14 @@ const Index = () => {
 
   const handleStationaryWeaponsChange = (_stationaryWeapons: string[]) => {
     setStationaryWeapons(_stationaryWeapons);
+  };
+
+  const handleTasksChange = (_tasks: string[]) => {
+    setTaskKeys(_tasks);
+  };
+
+  const handleLootLooseKeysChange = (_lootLooseKeys: string[]) => {
+    setLootLooseKeys(_lootLooseKeys);
   };
 
   const handleMapInfoActive = (_mapInfoActive: boolean) => {
@@ -409,6 +444,10 @@ const Index = () => {
   };
 
   const handleLayerChange = (name: string) => {
+    if (!name) {
+      setActiveLayer(undefined);
+      return;
+    }
     if (activeMap?.layers) {
       setActiveLayer(getLayer(name, activeMap.layers));
     }
@@ -416,20 +455,33 @@ const Index = () => {
 
   useEffect(() => {
     if (activeMapId) {
-      const data = dataImap.filter((v) => v.id === activeMapId)?.[0] as any;
-      setActiveMap(data);
-      toast.success(`地图已切换至${data.name}`);
+      const data = mapList.find((item) => item.id === activeMapId);
+      if (data) {
+        setActiveMap(data);
+        toast.success(`地图已切换至${data.name}`);
+      }
     }
-  }, [activeMapId]);
+  }, [activeMapId, mapList]);
 
   useEffect(() => {
-    if (mapList[0]?.id) {
+    if (!activeMapId && mapList[0]?.id) {
       setActiveMapId(mapList[0].id);
     }
-  }, [mapList]);
+  }, [mapList, activeMapId]);
 
   useEffect(() => {
-    setMapList(dataImap as any);
+    setMapList(loadInteractiveMaps());
+    setMapTasks(loadMapTasks());
+    refreshInteractiveMaps().then((maps) => {
+      if (maps) {
+        setMapList(maps);
+      }
+    });
+    refreshMapTasks().then((data) => {
+      if (data) {
+        setMapTasks(data);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -524,25 +576,25 @@ const Index = () => {
         })}
       >
         <div onContextMenu={(e) => e.preventDefault()}>
-          <Canvas
-            {...resolution}
+          <LeafletMap
             mapData={activeMap}
             activeLayer={activeLayer}
-            markerExtracts={extracts}
-            markerLocks={locks}
-            markerLootKeys={lootKeys}
-            markerSpawns={spawns}
-            markerHazards={hazards}
-            markerStationaryWeapons={stationaryWeapons}
+            markerExtracts={extracts || []}
+            markerLocks={locks || []}
+            markerLootKeys={lootKeys || []}
+            markerLootLoose={lootLooseKeys || []}
+            markerSpawns={spawns || []}
+            markerHazards={hazards || []}
+            markerStationaryWeapons={stationaryWeapons || []}
+            markerTasks={taskKeys || []}
+            tasks={mapTasks}
             locationScale={locationScale}
             strokeType={strokeType}
-            strokeColor={strokeColor}
-            strokeWidth={strokeWidth}
-            eraserWidth={eraserWidth}
-            resolution={resolution}
+            strokeColor={strokeColor || '#9a8866'}
+            strokeWidth={strokeWidth || 1}
+            eraserWidth={eraserWidth || 5}
             onCursorPositionChange={handleCursorPositionChange}
             onRulerPositionChange={handleRulerPositionChange}
-            callbackUtils={handleCallbackUtils}
           />
           <div className="im-header">
             <div className="im-header-left">
@@ -576,12 +628,15 @@ const Index = () => {
                   activeMapId={activeMapId}
                   extracts={extracts}
                   locks={locks}
-                  lootKeys={lootKeys}
+                  lootKeys={lootKeys || []}
+                  lootLooseKeys={lootLooseKeys || []}
                   spawns={spawns}
                   hazards={hazards}
                   stationaryWeapons={stationaryWeapons}
+                  tasks={taskKeys || []}
                   mapInfoActive={mapInfoActive}
                   lootContainers={activeMap.lootContainers}
+                  lootLoose={activeMap.lootLoose}
                   strokeColor={strokeColor}
                   strokeWidth={strokeWidth}
                   eraserWidth={eraserWidth}
@@ -595,9 +650,11 @@ const Index = () => {
                   onExtractsChange={handleExtractsChange}
                   onLocksChange={handleLocksChange}
                   onLootKeysChange={handleLootKeysChange}
+                  onLootLooseKeysChange={handleLootLooseKeysChange}
                   onSpawnsChange={handleSpawnsChange}
                   onHazardsChange={handleHazardsChange}
                   onStationaryWeaponsChange={handleStationaryWeaponsChange}
+                  onTasksChange={handleTasksChange}
                   onStrokeColorChange={handleStrokeColorChange}
                   onStrokeWidthChange={handleStrokeWidthChange}
                   onEraserWidthChange={handleEraserWidthChange}
@@ -606,7 +663,7 @@ const Index = () => {
                   onLocationScaleChange={handleLocationScaleChange}
                   onMapInfoActive={handleMapInfoActive}
                 />
-                {resolution.width > 1280 && <Coordinate {...utils} position={cursorPosition} />}
+                {resolution.width > 1280 && <Coordinate position={cursorPosition} />}
               </div>
               <div className="im-header-right-2">
                 <AdditionFunc />
@@ -626,8 +683,8 @@ const Index = () => {
               )}
             </div>
             <div className="im-footer-right">
-              <RulerPosition {...utils} rulerPosition={rulerPosition} />
-              {resolution.width <= 1280 && <Coordinate {...utils} position={cursorPosition} />}
+              <RulerPosition rulerPosition={rulerPosition} />
+              {resolution.width <= 1280 && <Coordinate position={cursorPosition} />}
             </div>
           </div>
         </div>
