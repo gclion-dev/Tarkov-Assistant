@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+.vscode
+.idea
+*.md
+.eslint*
+.prettier*
+.gitignore
+performance_test.sh
+assets/tarkov_tilty_logo.psd
+**/__pycache__
+*.log
+.DS_Store
