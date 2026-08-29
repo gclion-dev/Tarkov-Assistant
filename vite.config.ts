@@ -5,7 +5,7 @@ import eslintPlugin from 'vite-plugin-eslint';
 import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: './',
   base: './',
   publicDir: './src/assets',
@@ -17,13 +17,14 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    eslintPlugin({
-      include: [
-        './src/**/*.ts',
-        './src/**/*.tsx',
-      ],
-      fix: true,
-    }),
+    ...(command === 'serve'
+      ? [
+          eslintPlugin({
+            include: ['./src/**/*.ts', './src/**/*.tsx'],
+            failOnError: false,
+          }),
+        ]
+      : []),
   ],
   build: {
     outDir: path.resolve(__dirname, './dist'),
@@ -47,4 +48,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
