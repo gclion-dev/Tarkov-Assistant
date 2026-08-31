@@ -66,7 +66,6 @@ const Index = () => {
           </span>
         </div>
         <div className="im-warning-contacts">
-          <span>{t('contact.group')}</span>
           <span>{t('contact.email')}</span>
         </div>
       </div>

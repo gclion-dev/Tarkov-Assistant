@@ -101,7 +101,6 @@ const Index = (props: EFTWatcherProps) => {
           </button>
         </div>
         <div className="im-eftwatcher-contacts">
-          <span>{t('contact.group')}</span>
           <span>{t('contact.email')}</span>
         </div>
       </div>

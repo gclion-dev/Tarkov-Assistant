@@ -28,14 +28,13 @@ export default {
 
   // 互动地图
   interactive: {
-    title: '互动地图 - 缇尔蒂',
+    title: '互动地图',
     mapLoading: '互动地图载入中...',
   },
 
   // 联系信息
   contact: {
-    group: '缇尔蒂的粉丝群: 978276396',
-    email: '联系邮箱: tilty.sola#gmail.com',
+    email: '联系邮箱: 1535726542@qq.com',
   },
 
   // 地图信息
@@ -87,7 +86,7 @@ export default {
   // 登录
   login: {
     title: 'いらっしゃい',
-    text: '当前功能需要缇尔蒂·领域账户，请登录后继续。',
+    text: '当前功能需要登录账户，请登录后继续。',
     textClient: '请使用客户端提供的账户登录功能。',
     account: '邮箱/昵称',
     password: '密码',
@@ -99,7 +98,7 @@ export default {
 
   // Toast
   toast: {
-    alert: '您正在使用逃离塔科夫·缇尔蒂助手开源版本，请勿删除此条消息',
+    alert: '您正在使用逃离塔科夫助手开源版本，请勿删除此条消息',
   },
 
   // EFT Watcher
@@ -121,8 +120,8 @@ export default {
 
   // 警告和说明
   warning: {
-    title: '您正在使用缇尔蒂助手开源版本',
-    tips1: '请严格遵守使用协议，如有任何疑问请联系缇尔蒂。',
+    title: '您正在使用开源版本',
+    tips1: '请严格遵守使用协议。',
     move_w: '向上移动',
     move_a: '向左移动',
     move_s: '向下移动',
