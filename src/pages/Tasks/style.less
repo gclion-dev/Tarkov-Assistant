@@ -1,11 +1,13 @@
 .tasks-page {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   color: #ffffff;
   background-color: #121212;
   &-header {
     display: flex;
+    flex-shrink: 0;
     flex-wrap: wrap;
     align-items: center;
     gap: 16px;
@@ -56,11 +58,13 @@
     grid-template-columns: minmax(280px, 420px) 1fr;
     min-height: 0;
     flex: 1;
+    overflow: hidden;
   }
   &-list,
   &-detail {
     min-height: 0;
-    overflow: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   &-list {
     padding: 16px;
