@@ -12,6 +12,7 @@
     "serve": "vite preview",
     "build": "vite build",
     "update-maps": "node scripts/update-maps.mjs",
+    "update-tasks": "node scripts/update-task-catalog.mjs",
     "prebuild": "node build/prebuild",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

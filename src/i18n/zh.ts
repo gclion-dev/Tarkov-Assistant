@@ -32,6 +32,27 @@ export default {
     mapLoading: '互动地图载入中...',
   },
 
+  // 任务介绍
+  tasks: {
+    title: '任务介绍',
+    searchPlaceholder: '搜索任务名、商人、目标...',
+    allTraders: '全部商人',
+    allMaps: '全部地图',
+    kappaOnly: '仅 Kappa',
+    resultCount: '共 {n} 个任务',
+    empty: '没有找到符合条件的任务',
+    pick: '从左侧选择一个任务查看详情',
+    back: '返回列表',
+    level: '等级',
+    exp: '经验',
+    faction: '阵营',
+    wiki: '查看 Wiki 攻略',
+    requirements: '前置任务',
+    objectives: '任务目标',
+    rewards: '完成奖励',
+    optional: '可选',
+  },
+
   // 联系信息
   contact: {
     email: '联系邮箱: 1535726542@qq.com',

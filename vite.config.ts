@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
   root: './',
-  base: './',
+  base: '/',
   publicDir: './src/assets',
   resolve: {
     alias: {
@@ -29,12 +29,6 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: path.resolve(__dirname, './dist'),
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        entryFileNames: '[name].js',
-        assetFileNames: '[name].css',
-      },
-    },
   },
   server: {
     host: '0.0.0.0',

@@ -263,6 +263,14 @@ const main = async () => {
   console.log(
     `Saved items-slim.json (${Object.keys(slimItems).length} / ${itemIds.size} items, ${(Buffer.byteLength(JSON.stringify(slimItems)) / 1024).toFixed(0)} KB)`,
   );
+
+  const { spawnSync } = await import('child_process');
+  const catalog = spawnSync(process.execPath, [path.join(root, 'scripts/update-task-catalog.mjs')], {
+    stdio: 'inherit',
+  });
+  if (catalog.status !== 0) {
+    console.warn('tasks-catalog.json update failed');
+  }
 };
 
 main().catch((err) => {

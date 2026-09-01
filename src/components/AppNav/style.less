@@ -1,0 +1,37 @@
+.app-nav {
+  display: flex;
+  gap: 16px;
+  pointer-events: auto;
+  &-item {
+    display: inline-block;
+    height: 20px;
+    min-width: 128px;
+    padding: 8px 32px;
+    border: 3px solid #2c2c2c;
+    border-radius: 8px;
+    color: #ffffff;
+    background-color: #1c1c1c;
+    text-align: center;
+    cursor: pointer;
+    &.active {
+      color: #288828;
+      border-color: #288828;
+    }
+    &:hover {
+      opacity: 1;
+      color: #888888;
+    }
+  }
+}
+
+@media screen and (max-width: 750px) {
+  .app-nav {
+    gap: 8px;
+    &-item {
+      height: 24px;
+      min-width: 72px;
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+  }
+}

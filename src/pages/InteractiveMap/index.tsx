@@ -12,6 +12,8 @@ import { loadInteractiveMaps, loadMapTasks, refreshInteractiveMaps, refreshMapTa
 import langState from '@/store/lang';
 import { tarkovGamePathResolve } from '@/utils/tarkov';
 
+import AppNav from '@/components/AppNav';
+
 import useI18N from '../../i18n';
 import AdditionFunc from './components/UI/AdditionFunc';
 import ContextMenu from './components/UI/ContextMenu';
@@ -22,7 +24,6 @@ import MapSelect from './components/UI/MapSelect';
 import QuickSearch from './components/UI/QuickSearch';
 import QuickTools from './components/UI/QuickTools';
 import RulerPosition from './components/UI/RulerPosition';
-import Title from './components/UI/Title';
 import Tooltip from './components/UI/Tooltip';
 import Warning from './components/UI/Warning';
 import LeafletMap from './leaflet/LeafletMap';
@@ -599,7 +600,7 @@ const Index = () => {
           <div className="im-header">
             <div className="im-header-left">
               <div className="im-header-left-1">
-                <Title />
+                <AppNav />
                 {resolution.width > 750 && (
                   <MapSelect
                     mapList={mapList}

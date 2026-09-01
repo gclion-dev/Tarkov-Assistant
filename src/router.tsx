@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import InteractiveMap from '@/pages/InteractiveMap';
 import Notfound from '@/pages/NotFound';
+import Tasks from '@/pages/Tasks';
 import LayoutBase from '@/components/Layout/base';
 
 const Router = () => {
@@ -10,6 +11,8 @@ const Router = () => {
       <Route index element={<Navigate to="interactive" />} />
       <Route path="/" element={<LayoutBase />}>
         <Route path="interactive" element={<InteractiveMap />} />
+        <Route path="tasks" element={<Tasks />} />
+        <Route path="tasks/:taskId" element={<Tasks />} />
       </Route>
       <Route path="*" element={<Notfound />} />
     </Routes>
