@@ -9,7 +9,7 @@ import langState from '@/store/lang';
 import './style.less';
 
 const Index = () => {
-  const [show, setShow] = useState(true);
+  const [show, setShow] = useState(false);
 
   const [lang] = useRecoilState(langState);
 

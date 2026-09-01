@@ -1,37 +1,80 @@
 .app-nav {
-  display: flex;
-  gap: 16px;
   pointer-events: auto;
-  &-item {
-    display: inline-block;
-    height: 20px;
-    min-width: 128px;
-    padding: 8px 32px;
-    border: 3px solid #2c2c2c;
-    border-radius: 8px;
-    color: #ffffff;
-    background-color: #1c1c1c;
-    text-align: center;
-    cursor: pointer;
-    &.active {
-      color: #288828;
-      border-color: #288828;
+  &-base {
+    position: relative;
+    &-surface {
+      position: relative;
+      display: inline-block;
+      height: 20px;
+      min-width: 128px;
+      padding: 8px 40px 8px 16px;
+      border: 3px solid #2c2c2c;
+      border-radius: 8px;
+      color: #ffffff;
+      background-color: #1c1c1c;
+      text-align: center;
+      transition: all 0.3s;
+      cursor: pointer;
+      &-arrow {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        font-size: 24px;
+      }
+      &:hover {
+        color: #888888;
+      }
     }
-    &:hover {
-      opacity: 1;
-      color: #888888;
+    &-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: calc(100% - 6px);
+      padding: 6px 0;
+      border: 3px solid #2c2c2c;
+      border-radius: 8px;
+      background-color: #1c1c1c;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s;
+      z-index: 8;
+      &.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      &-item {
+        padding: 8px 40px 8px 16px;
+        color: #ffffff;
+        transition: all 0.3s;
+        cursor: pointer;
+        &:hover {
+          color: #888888;
+        }
+        &.active {
+          color: #288828;
+        }
+      }
     }
   }
 }
 
 @media screen and (max-width: 750px) {
   .app-nav {
-    gap: 8px;
-    &-item {
-      height: 24px;
-      min-width: 72px;
-      padding: 4px 12px;
-      font-size: 12px;
+    &-base {
+      &-surface {
+        height: 16px;
+        min-width: 64px;
+        font-size: 12px;
+        &-arrow {
+          top: 2px;
+        }
+      }
+      &-dropdown {
+        top: auto;
+        bottom: 0;
+        left: calc(100% + 8px);
+        font-size: 12px;
+      }
     }
   }
 }
