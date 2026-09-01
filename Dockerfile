@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install --registry=https://registry.npmmirror.com
+RUN npm install
 
 COPY . .
 # package.json 里的 prebuild 依赖缺失的 build/prebuild，因此直接调用 vite
