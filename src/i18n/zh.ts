@@ -106,8 +106,10 @@ export default {
 
   // 登录
   login: {
-    title: 'いらっしゃい',
-    text: '当前功能需要登录账户，请登录后继续。',
+    title: '欢迎回来',
+    text: '协作房间需要登录后使用，其余功能无需登录。',
+    registerTitle: '创建账户',
+    registerText: '注册后即可创建协作房间，和队友互相看到彼此的位置。',
     textClient: '请使用客户端提供的账户登录功能。',
     account: '邮箱',
     nickname: '昵称',

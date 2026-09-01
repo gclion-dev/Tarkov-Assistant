@@ -60,8 +60,13 @@ const Login = () => {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-card-title">{t('login.title')}</h1>
-        <p className="auth-card-text">{t('login.text')}</p>
+        {/* 标题与说明要跟着登录 / 注册模式一起切换 */}
+        <h1 className="auth-card-title">
+          {mode === 'login' ? t('login.title') : t('login.registerTitle')}
+        </h1>
+        <p className="auth-card-text">
+          {mode === 'login' ? t('login.text') : t('login.registerText')}
+        </p>
         <form className="auth-form" onSubmit={handleSubmit}>
           {mode === 'register' && (
             <input
