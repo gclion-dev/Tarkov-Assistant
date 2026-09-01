@@ -4,7 +4,9 @@ import { useInterval } from 'ahooks';
 import L from 'leaflet';
 
 import type { MapTask } from '@/data/transformTasks';
-import { quaternionToEulerAngles } from '@/utils/tarkov';
+import type { PlayerLocation, RoomMember } from '@/features/room/types';
+import { escapeHtml } from '@/utils/html';
+import { parseLocationFromFilename, quaternionToEulerAngles } from '@/utils/tarkov';
 
 import { showContextMenu } from '@/pages/InteractiveMap/components/UI/ContextMenu';
 
@@ -42,8 +44,20 @@ interface LeafletMapProps {
   strokeColor: string;
   strokeWidth: number;
   eraserWidth: number;
+  selfUserId?: string;
+  /** 自己的最新位置。不在房间里时也会渲染，保证单人使用的行为不变。 */
+  selfLocation?: PlayerLocation;
+  roomMembers?: RoomMember[];
   onCursorPositionChange?: (cursorPosition: InteractiveMap.Position2D) => void;
   onRulerPositionChange?: (rulerPosition: InteractiveMap.Position2D[] | undefined) => void;
+  onLocationUpdate?: (location: PlayerLocation) => void;
+}
+
+interface PlayerMarkerEntry {
+  label: string;
+  color: string;
+  location: PlayerLocation;
+  isSelf: boolean;
 }
 
 interface DrawStroke {
@@ -73,8 +87,12 @@ const Index = (props: LeafletMapProps) => {
     strokeColor,
     strokeWidth,
     eraserWidth,
+    selfUserId,
+    selfLocation,
+    roomMembers,
     onCursorPositionChange,
     onRulerPositionChange,
+    onLocationUpdate,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,6 +115,10 @@ const Index = (props: LeafletMapProps) => {
   const eraserWidthRef = useRef(eraserWidth);
   const locationScaleRef = useRef(locationScale);
   const mapDataRef = useRef(mapData);
+  const onLocationUpdateRef = useRef(onLocationUpdate);
+  const roomMembersRef = useRef(roomMembers);
+  const selfUserIdRef = useRef(selfUserId);
+  const selfLocationRef = useRef(selfLocation);
 
   onCursorRef.current = onCursorPositionChange;
   onRulerRef.current = onRulerPositionChange;
@@ -106,6 +128,80 @@ const Index = (props: LeafletMapProps) => {
   eraserWidthRef.current = eraserWidth;
   locationScaleRef.current = locationScale;
   mapDataRef.current = mapData;
+  onLocationUpdateRef.current = onLocationUpdate;
+  roomMembersRef.current = roomMembers;
+  selfUserIdRef.current = selfUserId;
+  selfLocationRef.current = selfLocation;
+
+  const SELF_COLOR = '#00ff88';
+
+  /** 把四元数换算成地图上的箭头角度（需要叠加地图自身的坐标系旋转）。 */
+  const getMarkerRotation = (quaternion?: number[]) => {
+    if (!quaternion) {
+      return 0;
+    }
+    const { coordinateRotation } = mapDataRef.current;
+    const rotation = quaternionToEulerAngles(quaternion)[0];
+    if (coordinateRotation === 90 || coordinateRotation === 270) {
+      return rotation + coordinateRotation + 180;
+    }
+    return rotation + (coordinateRotation || 0);
+  };
+
+  /**
+   * 玩家标记的唯一渲染入口。
+   * 自己和队友走同一条路径，避免此前「在房间 / 不在房间」两套逻辑各自复制一份旋转计算，
+   * 也避免退出房间瞬间自己的标记消失。
+   */
+  const renderPlayerMarkers = () => {
+    const layer = playerLayerRef.current;
+    if (!layer) {
+      return;
+    }
+    layer.clearLayers();
+
+    const currentMapId = mapDataRef.current.id;
+    const selfId = selfUserIdRef.current;
+    const own = selfLocationRef.current;
+    const entries: PlayerMarkerEntry[] = [];
+
+    if (own && own.mapId === currentMapId) {
+      entries.push({ label: '你的位置', color: SELF_COLOR, location: own, isSelf: true });
+    }
+    (roomMembersRef.current || []).forEach((member) => {
+      // 自己的标记始终以本地位置为准（更实时），不使用服务端回传的那一份。
+      if (!member.location || member.location.mapId !== currentMapId) {
+        return;
+      }
+      if (selfId && member.userId === selfId) {
+        return;
+      }
+      entries.push({
+        label: member.nickname,
+        color: member.color,
+        location: member.location,
+        isSelf: false,
+      });
+    });
+
+    entries.forEach(({ label, color, location, isSelf }) => {
+      const rotation = getMarkerRotation(location.quaternion);
+      // 昵称是其他玩家填写的不可信内容，拼进 innerHTML 前必须转义。
+      const safeLabel = escapeHtml(label);
+      L.marker(pos(location), {
+        icon: L.divIcon({
+          className: 'im-leaflet-player',
+          html:
+            '<div class="im-leaflet-player-arrow" ' +
+            `style="transform:rotate(${rotation}deg);border-bottom-color:${color}"></div>` +
+            `<span style="color:${color}">${safeLabel}</span>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 24],
+        }),
+        zIndexOffset: isSelf ? 1000 : 900,
+      }).addTo(layer);
+    });
+  };
 
   const heightRange = useMemo(() => {
     if (activeLayer?.extents?.[0]?.height) {
@@ -353,40 +449,26 @@ const Index = (props: LeafletMapProps) => {
     });
 
     (window as any).interactUpdateLocation = (filename: string) => {
-      const regexp =
-        /([0-9.-]+), ([0-9.-]+), ([0-9.-]+)_([0-9.-]+), ([0-9.-]+), ([0-9.-]+), ([0-9.-]+)/i;
-      const location = filename.match(regexp);
-      if (!location || !playerLayerRef.current) {
+      const parsed = parseLocationFromFilename(filename);
+      if (!parsed || !playerLayerRef.current) {
         return;
       }
-      const { current } = mapDataRef;
-      const data = {
-        x: Number(location[1]),
-        y: Number(location[2]),
-        z: Number(location[3]),
-        quaternion: [location[4], location[5], location[6], location[7]].map(Number),
+      const location: PlayerLocation = {
+        ...parsed,
+        // 以当前实际渲染的地图为准。此前用的是父组件另一个 state（activeMapId），
+        // 切图瞬间两者可能不同步，会把坐标打上上一张图的 mapId。
+        mapId: mapDataRef.current.id,
+        updatedAt: Date.now(),
       };
-      playerLayerRef.current.clearLayers();
-      let rotation = quaternionToEulerAngles(data.quaternion)[0];
-      if (current.coordinateRotation === 90 || current.coordinateRotation === 270) {
-        rotation += current.coordinateRotation + 180;
-      } else {
-        rotation += current.coordinateRotation || 0;
-      }
-      const marker = L.marker(pos(data), {
-        icon: L.divIcon({
-          className: 'im-leaflet-player',
-          html: `<div class="im-leaflet-player-arrow" style="transform:rotate(${rotation}deg)"></div><span>你的位置</span>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 24],
-        }),
-        zIndexOffset: 1000,
-      });
-      marker.addTo(playerLayerRef.current);
+      // 交给父组件保存并按节流上报；本地标记由 selfLocation 驱动统一渲染。
+      onLocationUpdateRef.current?.(location);
+      selfLocationRef.current = location;
+      renderPlayerMarkers();
+
       if (locationScaleRef.current) {
-        map.setView(pos(data), Math.min(map.getMaxZoom(), map.getZoom() + 1), { animate: true });
+        map.setView(pos(parsed), Math.min(map.getMaxZoom(), map.getZoom() + 1), { animate: true });
       } else {
-        map.panTo(pos(data), { animate: true });
+        map.panTo(pos(parsed), { animate: true });
       }
     };
 
@@ -399,6 +481,10 @@ const Index = (props: LeafletMapProps) => {
       drawStrokesRef.current = [];
     };
   }, [mapData.id, mapData.key]);
+
+  useEffect(() => {
+    renderPlayerMarkers();
+  }, [roomMembers, selfLocation, mapData.id]);
 
   useEffect(() => {
     const map = mapRef.current;

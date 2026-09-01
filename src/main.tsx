@@ -6,6 +6,8 @@ import { ToastContainer } from 'react-toastify';
 import { RecoilRoot } from 'recoil';
 import { ErrorBoundary, Message } from 'tilty-ui';
 
+import AuthProvider from '@/features/auth/AuthProvider';
+import RoomProvider from '@/features/room/RoomProvider';
 import Router from '@/router';
 
 import '@/scripts/axios';
@@ -17,7 +19,8 @@ import '@/global.less';
 
 declare global {
   interface Window {
-    clientAccessToken: string;
+    /** 由外部客户端壳注入，浏览器环境下为 undefined。 */
+    clientAccessToken?: string;
     buildVersion: string;
   }
 }
@@ -33,7 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <RecoilRoot>
           <ErrorBoundary>
             <BrowserRouter>
-              <Router />
+              {/* 会话恢复与房间连接各自只有一个持有者，避免多个组件重复发起。 */}
+              <AuthProvider>
+                <RoomProvider>
+                  <Router />
+                </RoomProvider>
+              </AuthProvider>
             </BrowserRouter>
             <ToastContainer
               position="bottom-right"

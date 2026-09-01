@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { useInterval, useLocalStorageState } from 'ahooks';
@@ -9,6 +9,10 @@ import { message } from 'tilty-ui';
 import { UAParser } from 'ua-parser-js';
 
 import { loadInteractiveMaps, loadMapTasks, refreshInteractiveMaps, refreshMapTasks } from '@/data/loadMaps';
+import useAuth from '@/features/auth/hooks/useAuth';
+import RoomPanel from '@/features/room/components/RoomPanel';
+import useRoom from '@/features/room/hooks/useRoom';
+import type { PlayerLocation } from '@/features/room/types';
 import langState from '@/store/lang';
 import { tarkovGamePathResolve } from '@/utils/tarkov';
 
@@ -106,9 +110,24 @@ const Index = () => {
 
   const [lang] = useRecoilState(langState);
 
+  const { user } = useAuth();
+  const { room, reportLocation } = useRoom();
+  const [selfLocation, setSelfLocation] = useState<PlayerLocation>();
+
   const directoryFilesCache = useRef<string[]>([]);
 
   const { t } = useI18N(lang);
+
+  const handleLocationUpdate = useCallback(
+    (location: PlayerLocation) => {
+      // 自己的位置始终保存在本地，未登录 / 未进房间时也要能在地图上看到自己。
+      setSelfLocation(location);
+      if (room && user) {
+        reportLocation(location, user.id);
+      }
+    },
+    [room, user, reportLocation],
+  );
 
   const resolveDirectories = async (initial = false) => {
     if (initial) {
@@ -580,6 +599,10 @@ const Index = () => {
           <LeafletMap
             mapData={activeMap}
             activeLayer={activeLayer}
+            selfUserId={user?.id}
+            selfLocation={selfLocation}
+            roomMembers={room?.members}
+            onLocationUpdate={handleLocationUpdate}
             markerExtracts={extracts || []}
             markerLocks={locks || []}
             markerLootKeys={lootKeys || []}
@@ -673,6 +696,7 @@ const Index = () => {
           </div>
           <div className="im-footer">
             <div className="im-footer-left">
+              <RoomPanel />
               {resolution.width <= 750 && (
                 <MapSelect
                   mapList={mapList}

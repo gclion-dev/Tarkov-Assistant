@@ -1,0 +1,12 @@
+node_modules
+dist
+# 绝不能进镜像：含 JWT_SECRET
+.env
+.env.*
+# 本地 sqlite 数据由 volume 提供
+data
+*.db
+*.db-shm
+*.db-wal
+*.log
+.DS_Store

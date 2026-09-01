@@ -2,6 +2,12 @@ node_modules
 dist
 .git
 .github
+# 房间服务有独立的构建上下文（./room-server），不要带进前端镜像，
+# 也避免把 room-server/.env 暴露到前端的构建上下文里
+room-server
+.env
+.env.*
+!.env.example
 .vscode
 .idea
 *.md

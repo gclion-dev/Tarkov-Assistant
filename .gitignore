@@ -18,3 +18,7 @@ coverage
 
 # system
 .DS_Store
+# env（含 JWT_SECRET 等密钥），示例文件除外
+.env
+.env.*
+!.env.example

@@ -29,7 +29,7 @@
     // "moduleDetection": "auto",                        /* Control what method is used to detect module-format JS files. */
 
     /* Modules */
-    // "module": "commonjs",                                /* Specify what module code is generated. */
+    "module": "ESNext" /* Vite 项目产物是 ESM，且代码里用到了 import.meta */,
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
     "moduleResolution": "Node" /* Specify how TypeScript looks up a file from a given module specifier. */,
     "baseUrl": "./" /* Specify the base directory to resolve non-relative module names. */,
@@ -115,5 +115,6 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": false /* Skip type checking all .d.ts files. */
   },
-  "exclude": ["node_modules"]
+  // room-server 是独立的 Node 服务，有自己的 tsconfig，不应被前端编译范围覆盖
+  "exclude": ["node_modules", "dist", "room-server"]
 }

@@ -51,6 +51,34 @@ export const calculatePenetration = (props: {
   }
 };
 
+const LOCATION_REGEXP =
+  /([0-9.-]+), ([0-9.-]+), ([0-9.-]+)_([0-9.-]+), ([0-9.-]+), ([0-9.-]+), ([0-9.-]+)/i;
+
+export interface ParsedLocation {
+  x: number;
+  y: number;
+  z: number;
+  quaternion: number[];
+}
+
+/** 从游戏截图文件名里解析坐标与朝向四元数。 */
+export const parseLocationFromFilename = (filename: string): ParsedLocation | null => {
+  const match = filename.match(LOCATION_REGEXP);
+  if (!match) {
+    return null;
+  }
+  const values = [match[1], match[2], match[3], match[4], match[5], match[6], match[7]].map(Number);
+  if (values.some((value) => !Number.isFinite(value))) {
+    return null;
+  }
+  return {
+    x: values[0],
+    y: values[1],
+    z: values[2],
+    quaternion: values.slice(3),
+  };
+};
+
 export const quaternionToEulerAngles = (q: number[]) => {
   // 四元数各分量
   const x = q[0];

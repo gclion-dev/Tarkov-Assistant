@@ -1,0 +1,192 @@
+import bcrypt from 'bcryptjs';
+import { Router, type Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+
+import config from '../config.js';
+import db from '../db.js';
+import { asyncHandler, conflict, unauthorized } from '../http/errors.js';
+import { signAccessToken, verifyRefreshToken } from './jwt.js';
+import { loginLimiter, refreshLimiter, registerLimiter, requireAuth } from './middleware.js';
+import {
+  issueRefreshToken,
+  lookupRefreshToken,
+  revokeAllSessions,
+  revokeFamilyById,
+  revokeRefreshFamily,
+  rotateRefreshToken,
+} from './sessions.js';
+import { loginSchema, parseBody, registerSchema } from './validators.js';
+
+const router = Router();
+
+interface UserRow {
+  id: string;
+  email: string;
+  nickname: string;
+}
+
+const toUser = (row: UserRow) => ({ id: row.id, email: row.email, nickname: row.nickname });
+
+const findUserById = (id: string) =>
+  db.prepare('SELECT id, email, nickname FROM users WHERE id = ?').get(id) as UserRow | undefined;
+
+const setRefreshCookie = (res: Response, token: string) => {
+  res.cookie(config.cookie.name, token, {
+    httpOnly: true,
+    secure: config.cookie.secure,
+    sameSite: 'lax',
+    maxAge: config.cookie.maxAgeMs,
+    path: config.cookie.path,
+  });
+};
+
+const clearRefreshCookie = (res: Response) => {
+  res.clearCookie(config.cookie.name, {
+    httpOnly: true,
+    secure: config.cookie.secure,
+    sameSite: 'lax',
+    path: config.cookie.path,
+  });
+};
+
+const readRefreshCookie = (cookies: Record<string, string> | undefined) => {
+  const token = cookies?.[config.cookie.name];
+  if (!token) {
+    throw unauthorized('未登录');
+  }
+  return token;
+};
+
+router.post(
+  '/register',
+  registerLimiter,
+  asyncHandler(async (req, res) => {
+    const { email, password, nickname } = parseBody(registerSchema, req.body);
+
+    const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email);
+    if (existing) {
+      throw conflict('该邮箱已注册');
+    }
+
+    const id = uuidv4();
+    // 异步版本，避免 hash 计算阻塞事件循环（同一进程还要转发实时位置广播）。
+    const passwordHash = await bcrypt.hash(password, config.auth.bcryptRounds);
+    try {
+      db.prepare('INSERT INTO users (id, email, nickname, password_hash) VALUES (?, ?, ?, ?)').run(
+        id,
+        email,
+        nickname,
+        passwordHash,
+      );
+    } catch (err) {
+      // 并发注册时唯一索引兜底。
+      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw conflict('该邮箱已注册');
+      }
+      throw err;
+    }
+
+    const user = { id, email, nickname };
+    setRefreshCookie(res, issueRefreshToken(id));
+    res.json({ code: 200, data: { accessToken: signAccessToken({ sub: id, nickname }), user } });
+  }),
+);
+
+router.post(
+  '/login',
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const { email, password } = parseBody(loginSchema, req.body);
+    const row = db
+      .prepare('SELECT id, email, nickname, password_hash FROM users WHERE lower(email) = ?')
+      .get(email) as (UserRow & { password_hash: string }) | undefined;
+
+    const matched = row ? await bcrypt.compare(password, row.password_hash) : false;
+    if (!row || !matched) {
+      throw unauthorized('邮箱或密码错误');
+    }
+
+    setRefreshCookie(res, issueRefreshToken(row.id));
+    res.json({
+      code: 200,
+      data: {
+        accessToken: signAccessToken({ sub: row.id, nickname: row.nickname }),
+        user: toUser(row),
+      },
+    });
+  }),
+);
+
+router.post(
+  '/refresh',
+  refreshLimiter,
+  asyncHandler(async (req, res) => {
+    const refreshToken = readRefreshCookie(req.cookies);
+
+    let payload;
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch {
+      clearRefreshCookie(res);
+      throw unauthorized('登录已过期');
+    }
+
+    const lookup = lookupRefreshToken(refreshToken, payload.sub);
+    if (lookup.status === 'reused') {
+      // 已登出、已超出宽限期或库里查不到的 token 被再次使用，按凭证泄露处理。
+      // 能定位到 family 就只作废这一条登录链，否则保守起见作废该用户全部会话。
+      if (lookup.row) {
+        revokeFamilyById(lookup.row.family_id, 'reuse');
+      } else {
+        revokeAllSessions(payload.sub);
+      }
+      clearRefreshCookie(res);
+      throw unauthorized('登录状态异常，请重新登录');
+    }
+    if (lookup.status === 'expired') {
+      clearRefreshCookie(res);
+      throw unauthorized('登录已过期');
+    }
+
+    const user = findUserById(payload.sub);
+    if (!user) {
+      revokeAllSessions(payload.sub);
+      clearRefreshCookie(res);
+      throw unauthorized('用户不存在');
+    }
+
+    // grace 表示这是多标签页并发刷新的落败方：cookie 已被赢家更新，这里只补发 access token。
+    if (lookup.status === 'valid') {
+      setRefreshCookie(res, rotateRefreshToken(lookup.row));
+    }
+
+    res.json({
+      code: 200,
+      data: {
+        accessToken: signAccessToken({ sub: user.id, nickname: user.nickname }),
+        user: toUser(user),
+      },
+    });
+  }),
+);
+
+router.post('/logout', (req, res) => {
+  const refreshToken = req.cookies?.[config.cookie.name];
+  if (refreshToken) {
+    // 整条 family 立即失效，包含还在轮转宽限期里的旧 token。
+    revokeRefreshFamily(refreshToken);
+  }
+  clearRefreshCookie(res);
+  res.json({ code: 200, data: null });
+});
+
+router.get('/me', requireAuth, (req, res, next) => {
+  const user = findUserById(req.auth!.sub);
+  if (!user) {
+    next(unauthorized('用户不存在'));
+    return;
+  }
+  res.json({ code: 200, data: { user: toUser(user) } });
+});
+
+export default router;

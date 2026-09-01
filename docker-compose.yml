@@ -3,6 +3,42 @@ services:
     build: .
     image: tarkov-assistant:latest
     container_name: tarkov-assistant
+    # 唯一对外暴露的端口。nginx-proxy-manager 只需把域名反代到这里，
+    # /api 与 /ws 由容器内的 nginx 转发给 room-server（同源，无需跨域）。
     ports:
       - "${PORT:-8080}:80"
+    depends_on:
+      room-server:
+        condition: service_healthy
     restart: unless-stopped
+
+  room-server:
+    build: ./room-server
+    image: tarkov-room-server:latest
+    container_name: tarkov-room-server
+    # 不映射到宿主机：只通过 web 容器访问，减少暴露面。
+    # 需要单独调试时再临时加 ports。
+    expose:
+      - "3001"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      # 必填。未设置时 compose 会直接报错退出，而不是悄悄用一个弱默认值。
+      # 生成方式：openssl rand -hex 32
+      JWT_SECRET: ${JWT_SECRET:?请先在 .env 中设置 JWT_SECRET（openssl rand -hex 32）}
+      # 同源部署，无需跨域校验；确有跨域需求时填写完整站点地址
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      # 浏览器侧是 https（由 nginx-proxy-manager 终止），因此 refresh cookie 必须带 Secure
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # 固定为 1：web 容器内的 nginx 已把 X-Forwarded-For 归一化成单一客户端 IP，
+      # 外层再套多少级反代都不用改这个值。调大会导致限流可被伪造 XFF 绕过。
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      DB_PATH: /app/data/room.db
+      JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-30m}
+      JWT_REFRESH_EXPIRES: ${JWT_REFRESH_EXPIRES:-7d}
+    volumes:
+      - room-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  room-data:

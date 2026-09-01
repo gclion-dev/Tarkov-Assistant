@@ -1,0 +1,173 @@
+.im-room {
+  position: relative;
+  pointer-events: auto;
+
+  &-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border: 3px solid #2c2c2c;
+    border-radius: 50%;
+    font-size: 18px;
+    color: #ffffff;
+    background-color: #1c1c1c;
+    cursor: pointer;
+    transition: all 0.3s;
+    &:hover {
+      border-color: #288828;
+      color: #288828;
+    }
+  }
+
+  &-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    color: #ffffff;
+    background-color: #288828;
+  }
+
+  &-panel {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 0;
+    width: 280px;
+    padding: 16px;
+    border: 3px solid #2c2c2c;
+    border-radius: 8px;
+    background-color: #1c1c1c;
+    z-index: 1000;
+
+    &-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      color: #ffffff;
+      font-size: 14px;
+    }
+
+    &-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+  }
+
+  &-btn {
+    width: 100%;
+    margin: 0;
+  }
+
+  &-join {
+    display: flex;
+    gap: 8px;
+  }
+
+  &-input {
+    flex: 1;
+    padding: 8px;
+    border: 2px solid #2c2c2c;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background-color: #121212;
+    outline: none;
+    &:focus {
+      border-color: #288828;
+    }
+  }
+
+  &-code {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #aaaaaa;
+    font-size: 13px;
+    strong {
+      color: #288828;
+      font-size: 18px;
+      letter-spacing: 2px;
+    }
+  }
+
+  &-copy {
+    margin-left: auto;
+    padding: 2px 8px;
+    border: 1px solid #2c2c2c;
+    border-radius: 4px;
+    color: #888888;
+    font-size: 12px;
+    background: none;
+    cursor: pointer;
+    &:hover {
+      color: #288828;
+      border-color: #288828;
+    }
+  }
+
+  &-members {
+    &-title {
+      margin-bottom: 6px;
+      color: #888888;
+      font-size: 12px;
+    }
+  }
+
+  &-status {
+    margin-left: auto;
+    color: #ffe66d;
+    font-size: 12px;
+  }
+
+  &-member {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    color: #cccccc;
+    font-size: 13px;
+    &.self {
+      color: #ffffff;
+    }
+    &-dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    // 昵称最长 20 字符，超出时截断，避免撑破面板布局
+    &-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &-host {
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    color: #888888;
+    background-color: #2c2c2c;
+  }
+
+  &-leave {
+    margin-top: 4px;
+    color: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+  }
+}

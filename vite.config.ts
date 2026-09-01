@@ -19,11 +19,11 @@ export default defineConfig(({ command }) => ({
     react(),
     ...(command === 'serve'
       ? [
-          eslintPlugin({
-            include: ['./src/**/*.ts', './src/**/*.tsx'],
-            failOnError: false,
-          }),
-        ]
+        eslintPlugin({
+          include: ['./src/**/*.ts', './src/**/*.tsx'],
+          failOnError: false,
+        }),
+      ]
       : []),
   ],
   build: {
@@ -39,6 +39,15 @@ export default defineConfig(({ command }) => ({
         target: 'https://json.tarkov.dev',
         changeOrigin: true,
         rewrite: (proxyPath) => proxyPath.replace(/^\/tarkov-json/, ''),
+      },
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

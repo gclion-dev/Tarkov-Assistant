@@ -22,3 +22,5 @@ coverage
 # others
 **/*.d.ts
 __test__
+# 独立的 Node 服务，有自己的 tsconfig 与 typecheck，不适用前端的 react 规则集
+room-server
