@@ -3,8 +3,9 @@ dist
 # 绝不能进镜像：含 JWT_SECRET
 .env
 .env.*
-# 本地 sqlite 数据由 volume 提供
-data
+# 本地 sqlite 数据由 volume 提供。同样要锚定到根，
+# 别把 src/data（按图识别的任务目录，编译时需要）排除掉。
+/data
 *.db
 *.db-shm
 *.db-wal

@@ -4,7 +4,10 @@ dist
 # 依赖版本需要可复现、可审计，因此这里显式纳入版本库。
 # 若要沿用「不提交锁文件」的约定，删掉下面这行即可，Dockerfile 会回落到 npm install。
 !package-lock.json
-data/
+# 前导斜杠不能省：这里要忽略的只有 room-server/data（sqlite 数据目录）。
+# 写成 data/ 会匹配任意层级，把 src/data/tasks-compact.json（按图识别用的任务目录）也一起忽略掉，
+# 结果是镜像里缺这个文件、构建时 tsc 直接报 TS2307。
+/data/
 *.db
 *.db-shm
 *.db-wal
