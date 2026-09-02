@@ -29,6 +29,13 @@ export const preferencesPayloadSchema = z.object({
   taskKeys: keyList(64),
   lootLooseKeys: keyList(64),
 
+  /**
+   * 「当前任务」的任务 id 列表。上限与前端 MAX_CURRENT_TASKS 保持一致。
+   * 设成 optional 是为了兼容还没更新的老客户端 —— 它们的 PUT 里没有这个字段，
+   * 如果按必填校验会直接 400，等于把老版本的偏好同步整个打挂。
+   */
+  currentTaskIds: keyList(50).optional(),
+
   mapInfoActive: z.boolean(),
   locationScale: z.boolean(),
 

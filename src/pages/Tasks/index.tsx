@@ -1,10 +1,12 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import classNames from 'classnames';
 import { useRecoilState } from 'recoil';
 
 import { CatalogTask, loadTaskCatalog, refreshTaskCatalog } from '@/data/taskCatalog';
+import usePreferences from '@/features/preferences/hooks/usePreferences';
+import { MAX_CURRENT_TASKS } from '@/features/preferences/types';
 import useI18N from '@/i18n';
 import langState from '@/store/lang';
 
@@ -41,12 +43,23 @@ const Index = () => {
   const navigate = useNavigate();
   const [lang] = useRecoilState(langState);
   const { t } = useI18N(lang);
+  /**
+   * 「当前任务」要跨刷新、跨设备存活，所以走 usePreferences 而不是组件内 state，
+   * 与地图页的图层选择用的是同一套本地存储 + 云端同步（features/preferences）。
+   */
+  const {
+    prefs: { currentTaskIds },
+    patch,
+  } = usePreferences();
 
   const [tasks, setTasks] = useState<CatalogTask[]>(loadTaskCatalog);
   const [keyword, setKeyword] = useState('');
   const [trader, setTrader] = useState('all');
   const [mapName, setMapName] = useState('all');
   const [kappaOnly, setKappaOnly] = useState(false);
+  /** 窄屏下「当前任务」是抽屉，需要一个开合状态；宽屏常驻，这个值不参与布局。 */
+  const [currentOpen, setCurrentOpen] = useState(false);
+  const [imageSearchOpen, setImageSearchOpen] = useState(false);
 
   useEffect(() => {
     refreshTaskCatalog().then((next) => {
@@ -103,14 +116,86 @@ const Index = () => {
   };
 
   const handleSelect = (id: string) => {
+    // 窄屏下详情会盖掉列表，抽屉留着只会挡住详情。
+    setCurrentOpen(false);
     navigate(`/tasks/${id}`);
   };
+
+  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+
+  /**
+   * 存的是 id，任务表随远端更新会增删，所以渲染前必须过一遍存在性校验。
+   * 这里只过滤展示，不回写偏好：远端数据临时缺失时回写等于把用户的选择永久删掉。
+   */
+  const currentTasks = useMemo(() => {
+    return currentTaskIds
+      .map((id) => taskById.get(id))
+      .filter((task): task is CatalogTask => Boolean(task));
+  }, [currentTaskIds, taskById]);
+
+  const currentTaskIdSet = useMemo(() => new Set(currentTaskIds), [currentTaskIds]);
+  const currentLimitReached = currentTaskIds.length >= MAX_CURRENT_TASKS;
+
+  /** 「+」按钮的无障碍名称。按钮里只有一个符号，不给名称的话读屏念出来是「加」。 */
+  const addButtonLabel = (added: boolean) => {
+    if (added) {
+      return t('tasks.removeFromCurrent');
+    }
+    if (currentLimitReached) {
+      return t('tasks.currentLimit').replace('{n}', String(MAX_CURRENT_TASKS));
+    }
+    return t('tasks.addToCurrent');
+  };
+
+  const handleToggleCurrent = useCallback(
+    (id: string) => {
+      if (currentTaskIdSet.has(id)) {
+        patch({ currentTaskIds: currentTaskIds.filter((item) => item !== id) });
+        return;
+      }
+      if (currentTaskIds.length >= MAX_CURRENT_TASKS) {
+        return;
+      }
+      patch({ currentTaskIds: [...currentTaskIds, id] });
+    },
+    [currentTaskIds, currentTaskIdSet, patch],
+  );
+
+  const handleClearCurrent = useCallback(() => {
+    patch({ currentTaskIds: [] });
+  }, [patch]);
+
+  // Esc 依次关掉最上层的浮层。弹窗和抽屉都是自己实现的，键盘关闭得手动接。
+  useEffect(() => {
+    if (!imageSearchOpen && !currentOpen) {
+      return undefined;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') {
+        return;
+      }
+      if (imageSearchOpen) {
+        setImageSearchOpen(false);
+        return;
+      }
+      setCurrentOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [imageSearchOpen, currentOpen]);
 
   return (
     <div className="tasks-page">
       <div className="tasks-page-header">
         <AppNav />
         <div className="tasks-page-filters">
+          <button
+            type="button"
+            className="tasks-page-image-search"
+            onClick={() => setImageSearchOpen(true)}
+          >
+            {t('tasks.imageSearch')}
+          </button>
           <input
             className="tasks-page-search"
             value={keyword}
@@ -156,27 +241,117 @@ const Index = () => {
           <div className="tasks-page-count">
             {t('tasks.resultCount').replace('{n}', String(filtered.length))}
           </div>
-          {filtered.map((task) => (
-            <button
-              key={task.id}
-              className={classNames('tasks-page-item', { active: task.id === selected?.id })}
-              onClick={() => handleSelect(task.id)}
-            >
-              <img src={task.image} alt="" />
-              <div className="tasks-page-item-main">
-                <div className="tasks-page-item-name">{task.name}</div>
-                <div className="tasks-page-item-meta">
-                  <span>{task.traderName}</span>
-                  <span>
-                    {t('tasks.level')} {task.minPlayerLevel}
-                  </span>
-                  {task.mapNames.length > 0 && <span>{task.mapNames.join(' / ')}</span>}
-                </div>
+          {filtered.map((task) => {
+            const added = currentTaskIdSet.has(task.id);
+            return (
+              <div
+                key={task.id}
+                className={classNames('tasks-page-item', { active: task.id === selected?.id })}
+              >
+                <button
+                  type="button"
+                  className="tasks-page-item-body"
+                  onClick={() => handleSelect(task.id)}
+                >
+                  <img src={task.image} alt="" />
+                  <div className="tasks-page-item-main">
+                    <div className="tasks-page-item-name">{task.name}</div>
+                    <div className="tasks-page-item-meta">
+                      <span>{task.traderName}</span>
+                      <span>
+                        {t('tasks.level')} {task.minPlayerLevel}
+                      </span>
+                      {task.mapNames.length > 0 && <span>{task.mapNames.join(' / ')}</span>}
+                    </div>
+                  </div>
+                  {task.kappaRequired && <span className="tasks-page-badge">Kappa</span>}
+                </button>
+                {/*
+                 * 做成 toggle 而不是「已添加就 disabled」：disabled 的按钮在 Chrome 上不派发
+                 * 鼠标事件，挂在它上面的提示用户根本看不到，等于留了个死控件。
+                 */}
+                <button
+                  type="button"
+                  className={classNames('tasks-page-item-add', { added })}
+                  aria-label={addButtonLabel(added)}
+                  aria-pressed={added}
+                  disabled={!added && currentLimitReached}
+                  onClick={() => handleToggleCurrent(task.id)}
+                >
+                  <span aria-hidden="true">{added ? '✓' : '+'}</span>
+                </button>
               </div>
-              {task.kappaRequired && <span className="tasks-page-badge">Kappa</span>}
-            </button>
-          ))}
+            );
+          })}
           {filtered.length === 0 && <div className="tasks-page-empty">{t('tasks.empty')}</div>}
+        </div>
+        {/*
+         * 宽屏常驻第三列（空的时候给引导文案，避免第一次添加时整个布局跳一下），
+         * 窄屏由 CSS 变成固定定位的抽屉，不参与纵向 grid 流 —— 否则它会被超长的
+         * 任务列表挤到可视区外，而 body 是 overflow:hidden，用户永远够不着。
+         */}
+        {currentOpen && (
+          <div className="tasks-page-current-mask" onClick={() => setCurrentOpen(false)} />
+        )}
+        <div className={classNames('tasks-page-current', { open: currentOpen })}>
+          <div className="tasks-page-current-head">
+            <span className="tasks-page-current-title">{t('tasks.currentTasks')}</span>
+            <span className="tasks-page-current-count">
+              {currentTaskIds.length} / {MAX_CURRENT_TASKS}
+            </span>
+            {currentTaskIds.length > 0 && (
+              <button
+                type="button"
+                className="tasks-page-current-clear"
+                onClick={handleClearCurrent}
+              >
+                {t('tasks.clearCurrent')}
+              </button>
+            )}
+            <button
+              type="button"
+              className="tasks-page-current-close"
+              aria-label={t('tasks.closeCurrent')}
+              onClick={() => setCurrentOpen(false)}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+          {currentTasks.length === 0 ? (
+            <p className="tasks-page-current-empty">{t('tasks.currentEmpty')}</p>
+          ) : (
+            currentTasks.map((task) => (
+              <div
+                key={task.id}
+                className={classNames('tasks-page-current-item', {
+                  active: task.id === selected?.id,
+                })}
+              >
+                <button
+                  type="button"
+                  className="tasks-page-current-item-body"
+                  onClick={() => handleSelect(task.id)}
+                >
+                  <img src={task.image} alt="" />
+                  <div className="tasks-page-current-item-main">
+                    <div className="tasks-page-current-item-name">{task.name}</div>
+                    <div className="tasks-page-current-item-meta">
+                      <span>{task.traderName}</span>
+                      {task.mapNames.length > 0 && <span>{task.mapNames.join(' / ')}</span>}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="tasks-page-current-item-remove"
+                  aria-label={t('tasks.removeFromCurrent')}
+                  onClick={() => handleToggleCurrent(task.id)}
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+            ))
+          )}
         </div>
         <div className="tasks-page-detail">
           {selected ? (
@@ -197,7 +372,8 @@ const Index = () => {
                       {t('tasks.exp')} {selected.experience}
                     </span>
                     <span>
-                      {t('tasks.faction')} {FACTION_LABEL[selected.factionName] || selected.factionName}
+                      {t('tasks.faction')}{' '}
+                      {FACTION_LABEL[selected.factionName] || selected.factionName}
                     </span>
                     {selected.kappaRequired && <span className="tasks-page-badge">Kappa</span>}
                     {selected.lightkeeperRequired && (
@@ -208,7 +384,12 @@ const Index = () => {
                     <div className="tasks-page-maps">{selected.mapNames.join(' · ')}</div>
                   )}
                   {selected.wikiLink && (
-                    <a className="tasks-page-wiki" href={selected.wikiLink} target="_blank" rel="noreferrer">
+                    <a
+                      className="tasks-page-wiki"
+                      href={selected.wikiLink}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       {t('tasks.wiki')}
                     </a>
                   )}
@@ -256,7 +437,10 @@ const Index = () => {
                     </div>
                   )}
                   {selected.finishRewards.traderStanding.map((standing) => (
-                    <div key={`${standing.traderId}-${standing.standing}`} className="tasks-page-reward">
+                    <div
+                      key={`${standing.traderId}-${standing.standing}`}
+                      className="tasks-page-reward"
+                    >
                       {standing.traderName} {standing.standing > 0 ? '+' : ''}
                       {standing.standing}
                     </div>
@@ -277,6 +461,36 @@ const Index = () => {
           )}
         </div>
       </div>
+      {/* 窄屏下打开「当前任务」抽屉的入口，宽屏由 CSS 隐藏（面板本身就常驻）。 */}
+      <button
+        type="button"
+        className="tasks-page-current-fab"
+        aria-label={t('tasks.openCurrent')}
+        onClick={() => setCurrentOpen(true)}
+      >
+        <span aria-hidden="true">{t('tasks.currentTasks')}</span>
+        {currentTasks.length > 0 && (
+          <span className="tasks-page-current-fab-badge" aria-hidden="true">
+            {currentTasks.length}
+          </span>
+        )}
+      </button>
+      {imageSearchOpen && (
+        <div className="tasks-page-modal-mask" onClick={() => setImageSearchOpen(false)}>
+          <div
+            className="tasks-page-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('tasks.imageSearch')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p>{t('tasks.imageSearchDev')}</p>
+            <button type="button" autoFocus onClick={() => setImageSearchOpen(false)}>
+              {t('tasks.imageSearchDevOk')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

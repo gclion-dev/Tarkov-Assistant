@@ -9,6 +9,14 @@
 /** payload 结构版本号。字段语义发生不兼容变更时 +1，并在 localStore 里补迁移。 */
 export const PREFERENCES_VERSION = 1;
 
+/**
+ * 「当前任务」的数量上限。
+ *
+ * 不设上限的话用户能把整个任务表塞进偏好，payload 会顶到服务端的 8KB 限制，
+ * 从那一刻起所有偏好都同步不上去。同一个常量也用于服务端校验（room-server 侧另有一份）。
+ */
+export const MAX_CURRENT_TASKS = 50;
+
 export interface UserPreferences {
   /** 当前地图 id。可能指向已下线的地图，读取方必须做存在性校验。 */
   activeMapId?: string;
@@ -28,6 +36,14 @@ export interface UserPreferences {
   stationaryWeapons: string[];
   taskKeys: string[];
   lootLooseKeys: string[];
+
+  /**
+   * 用户手动挑出来的「当前任务」id 列表，按添加顺序。
+   *
+   * 与 activeMapId 同理：可能指向已从任务表下线的任务，读取方必须做存在性校验。
+   * 校验结果只用于渲染，不要回写这里 —— 远端任务表临时缺数据时回写会把用户的选择永久删掉。
+   */
+  currentTaskIds: string[];
 
   mapInfoActive: boolean;
   locationScale: boolean;
@@ -51,6 +67,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   stationaryWeapons: [],
   taskKeys: [],
   lootLooseKeys: [],
+  currentTaskIds: [],
 
   mapInfoActive: true,
   locationScale: true,

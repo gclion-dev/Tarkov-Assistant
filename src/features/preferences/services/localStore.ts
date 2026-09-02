@@ -1,5 +1,6 @@
 import {
   DEFAULT_PREFERENCES,
+  MAX_CURRENT_TASKS,
   PREFERENCES_VERSION,
   type UserPreferences,
 } from '@/features/preferences/types';
@@ -64,6 +65,7 @@ export const sanitizePreferences = (raw: unknown): UserPreferences => {
     'stationaryWeapons',
     'taskKeys',
     'lootLooseKeys',
+    'currentTaskIds',
   ];
   arrayFields.forEach((field) => {
     const value = input[field];
@@ -74,6 +76,12 @@ export const sanitizePreferences = (raw: unknown): UserPreferences => {
   });
   next.extracts = next.extracts.filter((item) =>
     (['pmc', 'scav', 'shared'] as string[]).includes(item)) as InteractiveMap.Faction[];
+  // 去重 + 截断放在 sanitize 里而不是只放在 UI 里：
+  // 云端和别的标签页的数据也会走这条路，UI 的上限拦不住它们。
+  next.currentTaskIds = Array.from(new Set(next.currentTaskIds.filter(Boolean))).slice(
+    0,
+    MAX_CURRENT_TASKS,
+  );
 
   if (typeof input.mapInfoActive === 'boolean') {
     next.mapInfoActive = input.mapInfoActive;

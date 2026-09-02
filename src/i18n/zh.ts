@@ -51,6 +51,17 @@ export default {
     objectives: '任务目标',
     rewards: '完成奖励',
     optional: '可选',
+    currentTasks: '当前任务',
+    addToCurrent: '添加到当前任务',
+    removeFromCurrent: '从当前任务移除',
+    clearCurrent: '清空',
+    currentEmpty: '还没有添加任务。点任务右上角的 + 把它加进来。',
+    currentLimit: '最多只能添加 {n} 个任务',
+    openCurrent: '打开当前任务',
+    closeCurrent: '关闭当前任务',
+    imageSearch: '按图搜索',
+    imageSearchDev: '功能开发中，敬请期待',
+    imageSearchDevOk: '知道了',
   },
 
   // 联系信息

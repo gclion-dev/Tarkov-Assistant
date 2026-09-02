@@ -22,6 +22,20 @@
     gap: 8px;
     flex: 1;
   }
+  &-image-search {
+    height: 40px;
+    padding: 0 12px;
+    border: 3px solid #2c2c2c;
+    border-radius: 8px;
+    color: #ffffff;
+    background-color: #121212;
+    white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+    &:hover {
+      border-color: #288828;
+    }
+  }
   &-search,
   &-select {
     height: 40px;
@@ -55,7 +69,8 @@
   }
   &-body {
     display: grid;
-    grid-template-columns: minmax(280px, 420px) 1fr;
+    // 「当前任务」常驻中间一列。不按有无内容切换列数，否则第一次添加时整个布局会跳一下。
+    grid-template-columns: minmax(280px, 420px) minmax(200px, 260px) 1fr;
     min-height: 0;
     flex: 1;
     overflow: hidden;
@@ -76,24 +91,60 @@
     font-size: 13px;
   }
   &-item {
+    position: relative;
     display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
+    align-items: stretch;
     margin-bottom: 8px;
-    padding: 8px;
-    border: 3px solid #2c2c2c;
-    border-radius: 8px;
-    color: #ffffff;
-    background-color: #1c1c1c;
-    text-align: left;
-    cursor: pointer;
-    img {
-      width: 56px;
-      height: 56px;
-      object-fit: cover;
+    &-body {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 8px 36px 8px 8px;
+      border: 3px solid #2c2c2c;
+      border-radius: 8px;
+      color: #ffffff;
+      background-color: #1c1c1c;
+      text-align: left;
+      cursor: pointer;
+      img {
+        width: 56px;
+        height: 56px;
+        object-fit: cover;
+        border-radius: 6px;
+        background-color: #000000;
+      }
+    }
+    &-add {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 2px solid #2c2c2c;
       border-radius: 6px;
-      background-color: #000000;
+      color: #ffffff;
+      background-color: #121212;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      &:hover:not(:disabled) {
+        border-color: #288828;
+        color: #288828;
+      }
+      &.added {
+        color: #288828;
+        border-color: #288828;
+      }
+      // 只有到达数量上限时才会 disabled。
+      &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
     }
     &-main {
       min-width: 0;
@@ -110,9 +161,143 @@
       color: #888888;
       font-size: 12px;
     }
-    &.active,
-    &:hover {
+    &.active &-body,
+    &:hover &-body {
       border-color: #288828;
+    }
+  }
+  &-current {
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-right: 3px solid #2c2c2c;
+    background-color: #181818;
+    &-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    &-title {
+      color: #9a8866;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    &-count {
+      flex: 1;
+      color: #666666;
+      font-size: 12px;
+    }
+    &-clear {
+      padding: 2px 8px;
+      border: none;
+      border-radius: 4px;
+      color: #888888;
+      background: transparent;
+      font-size: 12px;
+      cursor: pointer;
+      &:hover {
+        color: #ffffff;
+      }
+    }
+    // 抽屉专属，宽屏面板常驻不需要关闭按钮。
+    &-close {
+      display: none;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      color: #888888;
+      background: transparent;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      &:hover {
+        color: #ffffff;
+      }
+    }
+    &-empty {
+      margin: 0;
+      color: #666666;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    &-item {
+      position: relative;
+      margin-bottom: 8px;
+      &-body {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 28px 6px 6px;
+        border: 3px solid #2c2c2c;
+        border-radius: 8px;
+        color: #ffffff;
+        background-color: #1c1c1c;
+        text-align: left;
+        cursor: pointer;
+        img {
+          width: 40px;
+          height: 40px;
+          object-fit: cover;
+          border-radius: 4px;
+          background-color: #000000;
+        }
+      }
+      &-main {
+        min-width: 0;
+        flex: 1;
+      }
+      &-name {
+        margin-bottom: 2px;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      &-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        color: #888888;
+        font-size: 11px;
+      }
+      &-remove {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        border: none;
+        border-radius: 4px;
+        color: #888888;
+        background: transparent;
+        font-size: 18px;
+        line-height: 1;
+        transform: translateY(-50%);
+        cursor: pointer;
+        &:hover {
+          color: #ff6b6b;
+        }
+      }
+      &.active &-body,
+      &:hover &-body {
+        border-color: #288828;
+      }
+    }
+    // 遮罩和悬浮入口只服务于窄屏抽屉，宽屏一律不显示。
+    &-mask {
+      display: none;
+    }
+    &-fab {
+      display: none;
     }
   }
   &-badge {
@@ -243,6 +428,42 @@
       object-fit: contain;
     }
   }
+  &-modal-mask {
+    position: fixed;
+    inset: 0;
+    // 要压住窄屏下的「当前任务」抽屉（1001）。
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+  &-modal {
+    min-width: 280px;
+    max-width: 90vw;
+    padding: 24px;
+    border: 3px solid #2c2c2c;
+    border-radius: 8px;
+    color: #ffffff;
+    background-color: #1c1c1c;
+    text-align: center;
+    p {
+      margin: 0 0 20px;
+      color: #aeaeb0;
+      font-size: 15px;
+    }
+    button {
+      padding: 8px 24px;
+      border: 3px solid #2c2c2c;
+      border-radius: 8px;
+      color: #ffffff;
+      background-color: #121212;
+      cursor: pointer;
+      &:hover {
+        border-color: #288828;
+      }
+    }
+  }
 }
 
 @media screen and (max-width: 960px) {
@@ -252,6 +473,66 @@
     }
     &-list {
       border-right: none;
+    }
+    /*
+     * 抽屉：脱离 grid 流固定在右侧。
+     * 之前是当作第二个 grid 行塞在列表下面，但 auto 行会被上千条任务撑满，
+     * 而 body 是 overflow:hidden，面板直接被裁掉、永远滚不到。
+     */
+    &-current {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1001;
+      width: min(320px, 86vw);
+      border-right: none;
+      border-left: 3px solid #2c2c2c;
+      transform: translateX(100%);
+      // 关闭时连同 visibility 一起收掉，否则移出屏幕的内容仍然能被 Tab 聚焦。
+      visibility: hidden;
+      transition:
+        transform 0.2s ease,
+        visibility 0.2s ease;
+      &.open {
+        transform: translateX(0);
+        visibility: visible;
+      }
+      &-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      &-mask {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: block;
+        background-color: rgba(0, 0, 0, 0.6);
+      }
+      &-fab {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 999;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 16px;
+        border: 3px solid #2c2c2c;
+        border-radius: 999px;
+        color: #ffffff;
+        background-color: #121212;
+        font-size: 13px;
+        cursor: pointer;
+        &-badge {
+          padding: 0 6px;
+          border-radius: 999px;
+          color: #121212;
+          background-color: #288828;
+          font-size: 12px;
+        }
+      }
     }
     &-back {
       display: inline-block;
