@@ -55,18 +55,21 @@ const Index = (props: EFTWatcherProps) => {
   };
 
   useEffect(() => {
-    if (directoryHandler) {
+    // 只要截图目录已配置（已监听，或只差一次手势恢复授权），就把引导关掉。
+    if (directoryHandler || directoryPending) {
       setShow(false);
     }
-  }, [directoryHandler]);
+  }, [directoryHandler, directoryPending]);
 
   useEffect(() => {
     if (self !== top || !ready) {
       return;
     }
     // 等目录恢复的结果出来再决定要不要弹。
-    // 截图目录已经恢复好的用户不需要再看这个引导；不支持该 API 的浏览器仍然要看到说明。
-    if (!directoryHandler) {
+    // 已经配置过截图目录的用户（含待授权状态）不需要再看这个引导，
+    // 待授权的恢复入口在设置面板和地图信息里已经有了；
+    // 不支持该 API 的浏览器仍然要看到说明。
+    if (!directoryHandler && !directoryPending) {
       setShow(true);
     }
   }, [ready]);
