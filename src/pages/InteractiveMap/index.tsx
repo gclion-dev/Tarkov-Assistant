@@ -835,12 +835,9 @@ const Index = () => {
         <QuickSearch show={quickSearchShow} onHide={() => setQuickSearchShow(false)} />
         <EFTWatcher
           directoryHandler={directoryHandler}
-          tarkovGamePathHandler={tarkovGamePathHandler}
           directoryPending={!!pendingDirectoryHandle}
-          tarkovGamePathPending={!!pendingGamePathHandle}
           ready={handlesRestored}
           onClickEftWatcherPath={handleClickEftWatcherPath}
-          onClickTarkovGamePath={handleClickTarkovGamePath}
         />
         <Warning />
       </div>
