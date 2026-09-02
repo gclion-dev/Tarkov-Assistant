@@ -16,6 +16,7 @@ import { errorHandler } from './http/errors.js';
 import preferencesRoutes from './preferences/routes.js';
 import { startRoomCleanup } from './room/manager.js';
 import { setupRoomSocket } from './room/socket.js';
+import tasksRoutes from './tasks/routes.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -37,6 +38,10 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false 
 if (config.corsEnabled) {
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
 }
+// 按图识别的请求体是多张 base64 截图（上限 5 张 × 2MB，base64 膨胀后约 14MB），
+// 必须在全局 16kb 解析器之前挂上更宽的上限，否则请求会先被拦成 413。
+// nginx 侧 /api/tasks/ 的 client_max_body_size 需要与这里保持一致。
+app.use('/api/tasks', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '16kb' }));
 app.use(cookieParser());
 
@@ -47,6 +52,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/tasks', tasksRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ code: 404, errorMessage: '接口不存在' });

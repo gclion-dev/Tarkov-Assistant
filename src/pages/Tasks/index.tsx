@@ -12,6 +12,8 @@ import langState from '@/store/lang';
 
 import AppNav from '@/components/AppNav';
 
+import ImageSearchModal from './ImageSearchModal';
+
 import './style.less';
 
 const FACTION_LABEL: Record<string, string> = {
@@ -164,6 +166,33 @@ const Index = () => {
   const handleClearCurrent = useCallback(() => {
     patch({ currentTaskIds: [] });
   }, [patch]);
+
+  /**
+   * 按图识别后批量加入当前任务，逻辑与逐个点「+」一致，并遵守 50 条上限。
+   *
+   * 三个计数分开返回：弹窗要能区分「新加了几个」「本来就有几个」「因为满了没加进去几个」，
+   * 合成一个 skipped 会让提示文案说不清到底发生了什么。
+   */
+  const handleAddTasksBatch = useCallback(
+    (ids: string[]) => {
+      const existing = new Set(currentTaskIds);
+      // 目录里查不到的 id 说明前后端任务数据版本不一致，直接忽略，不计入任何计数。
+      const known = ids.filter((id) => taskById.has(id));
+      const already = known.filter((id) => existing.has(id)).length;
+      const toAdd = known.filter((id) => !existing.has(id));
+      const slots = Math.max(0, MAX_CURRENT_TASKS - currentTaskIds.length);
+      const accepted = toAdd.slice(0, slots);
+      if (accepted.length > 0) {
+        patch({ currentTaskIds: [...currentTaskIds, ...accepted] });
+      }
+      return {
+        added: accepted.length,
+        already,
+        overLimit: toAdd.length - accepted.length,
+      };
+    },
+    [currentTaskIds, patch, taskById],
+  );
 
   // Esc 依次关掉最上层的浮层。弹窗和抽屉都是自己实现的，键盘关闭得手动接。
   useEffect(() => {
@@ -476,20 +505,13 @@ const Index = () => {
         )}
       </button>
       {imageSearchOpen && (
-        <div className="tasks-page-modal-mask" onClick={() => setImageSearchOpen(false)}>
-          <div
-            className="tasks-page-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('tasks.imageSearch')}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p>{t('tasks.imageSearchDev')}</p>
-            <button type="button" autoFocus onClick={() => setImageSearchOpen(false)}>
-              {t('tasks.imageSearchDevOk')}
-            </button>
-          </div>
-        </div>
+        <ImageSearchModal
+          lang={lang}
+          tasks={tasks}
+          currentTaskIds={currentTaskIds}
+          onAddTasks={handleAddTasksBatch}
+          onClose={() => setImageSearchOpen(false)}
+        />
       )}
     </div>
   );

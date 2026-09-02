@@ -9,6 +9,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": false,
     "esModuleInterop": true,
+    // 按图识别用的精简任务目录以 JSON 内置在 src/data 下，编译时会一并拷进 dist。
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "outDir": "dist",

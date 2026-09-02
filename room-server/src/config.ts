@@ -178,6 +178,16 @@ export const config = {
     // 单个连接每 10 秒允许的事件总数，超出即断开。
     eventBurst: readInt(process.env.ROOM_EVENT_BURST, 300),
   },
+  /** 智谱 GLM 多模态 API，用于任务页「按图搜索」。密钥只存服务端，勿下发到前端。 */
+  zhipu: {
+    apiKey: process.env.ZHIPU_API_KEY?.trim() || '',
+    model: process.env.ZHIPU_MODEL?.trim() || 'glm-5.3-flash',
+    /**
+     * 每个登录用户每 24 小时可用的识别次数。计数在内存里，服务重启即重置。
+     * 至少为 1：readInt 会把空字符串读成 0，那样等于悄悄停用功能。
+     */
+    dailyLimit: Math.max(1, readInt(process.env.ZHIPU_DAILY_LIMIT, 10)),
+  },
 } as const;
 
 export default config;

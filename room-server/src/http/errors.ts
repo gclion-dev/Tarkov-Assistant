@@ -17,7 +17,11 @@ export const unauthorized = (message: string) => new HttpError(401, message);
 export const forbidden = (message: string) => new HttpError(403, message);
 export const notFound = (message: string) => new HttpError(404, message);
 export const conflict = (message: string) => new HttpError(409, message);
+export const tooManyRequests = (message: string) => new HttpError(429, message);
+/** 依赖的上游服务返回了异常结果。与 503（本服务未配置/不可用）区分开。 */
+export const badGateway = (message: string) => new HttpError(502, message);
 export const serviceUnavailable = (message: string) => new HttpError(503, message);
+export const gatewayTimeout = (message: string) => new HttpError(504, message);
 
 /** 包裹 async 处理器，把 rejected promise 交给 express 的错误处理链，避免请求悬挂。 */
 export const asyncHandler =

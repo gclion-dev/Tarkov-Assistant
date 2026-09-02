@@ -44,6 +44,12 @@ services:
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_SESSION_TTL_MS: ${ADMIN_SESSION_TTL_MS:-7200000}
+      # 任务页「按图搜索」，调用智谱多模态模型，仅登录用户可用。
+      # 留空时该接口返回 503，其余功能不受影响。
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      ZHIPU_MODEL: ${ZHIPU_MODEL:-glm-5.3-flash}
+      # 每个登录用户每天的识别次数上限，直接对应大模型额度消耗。
+      ZHIPU_DAILY_LIMIT: ${ZHIPU_DAILY_LIMIT:-10}
     volumes:
       - room-data:/app/data
     restart: unless-stopped

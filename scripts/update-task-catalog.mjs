@@ -147,8 +147,40 @@ const transformTaskCatalog = (tasksPayload, tasksZh, tradersPayload, tradersZh, 
   });
 };
 
+/**
+ * 另外产出一份「精简目录」给 room-server 使用。
+ *
+ * 按图识别需要把全部任务喂给大模型做匹配，这份目录必须由服务端持有：
+ * 让前端上传目录既浪费带宽，又等于让调用方任意控制 prompt 内容。
+ * 只保留匹配用得上的字段，体积从 ~750KB 降到 ~80KB。
+ */
+const writeCompactCatalog = (catalog) => {
+  const compact = catalog.map((task) => ({
+    id: task.id,
+    name: task.name,
+    trader: task.traderName,
+    maps: task.mapNames,
+    objectives: (task.objectives || []).map((item) => item.description).filter(Boolean),
+  }));
+  const dir = path.join(root, 'room-server/src/data');
+  fs.mkdirSync(dir, { recursive: true });
+  const out = path.join(dir, 'tasks-compact.json');
+  fs.writeFileSync(out, `${JSON.stringify(compact)}\n`);
+  console.log(
+    `Saved room-server/src/data/tasks-compact.json (${compact.length} tasks, ${(Buffer.byteLength(JSON.stringify(compact)) / 1024).toFixed(0)} KB)`,
+  );
+};
+
 const main = async () => {
   const dataDir = path.join(root, 'src/data');
+
+  // --local：不联网，仅用现有 tasks-catalog.json 重新生成 room-server 的精简目录。
+  if (process.argv.includes('--local')) {
+    const catalog = JSON.parse(fs.readFileSync(path.join(dataDir, 'tasks-catalog.json'), 'utf8'));
+    writeCompactCatalog(catalog);
+    return;
+  }
+
   const itemsPath = path.join(dataDir, 'items-slim.json');
   const items = fs.existsSync(itemsPath) ? JSON.parse(fs.readFileSync(itemsPath, 'utf8')) : {};
 
@@ -175,6 +207,8 @@ const main = async () => {
   console.log(
     `Saved tasks-catalog.json (${catalog.length} tasks, ${(Buffer.byteLength(JSON.stringify(catalog)) / 1024).toFixed(0)} KB)`,
   );
+
+  writeCompactCatalog(catalog);
 };
 
 main().catch((err) => {
