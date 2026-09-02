@@ -1,6 +1,10 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
 import type {
+  AdminInviteCode,
+  AdminInviteCreateInput,
+  AdminInvitePage,
+  AdminInviteQuery,
   AdminSession,
   AdminStats,
   AdminUserPage,
@@ -100,6 +104,35 @@ export const adminApi = {
       url: `/users/${id}`,
       method: 'DELETE',
     }),
+
+  inviteCodes: (query: AdminInviteQuery) =>
+    request<AdminInvitePage>({
+      url: '/invite-codes',
+      method: 'GET',
+      params: {
+        search: query.search || undefined,
+        status: query.status,
+        page: query.page,
+        pageSize: query.pageSize,
+      },
+    }),
+
+  createInviteCodes: (input: AdminInviteCreateInput) =>
+    request<{ items: AdminInviteCode[] }>({
+      url: '/invite-codes',
+      method: 'POST',
+      data: input,
+    }),
+
+  setInviteCodeDisabled: (id: string, disabled: boolean) =>
+    request<AdminInviteCode>({
+      url: `/invite-codes/${id}`,
+      method: 'PATCH',
+      data: { disabled },
+    }),
+
+  deleteInviteCode: (id: string) =>
+    request<{ id: string; code: string }>({ url: `/invite-codes/${id}`, method: 'DELETE' }),
 };
 
 export default adminApi;

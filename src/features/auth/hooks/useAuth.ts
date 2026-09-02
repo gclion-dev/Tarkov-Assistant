@@ -30,8 +30,8 @@ const useAuth = () => {
   );
 
   const register = useCallback(
-    async (email: string, password: string, nickname: string) =>
-      applySession(await authApi.register(email, password, nickname)),
+    async (email: string, password: string, nickname: string, inviteCode?: string) =>
+      applySession(await authApi.register(email, password, nickname, inviteCode)),
     [applySession],
   );
 

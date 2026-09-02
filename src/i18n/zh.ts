@@ -121,6 +121,8 @@ export default {
     recoveryBtn: '找回密码',
     returnBtn: '返回地图',
     passwordHint: '密码至少 8 位',
+    inviteCode: '邀请码',
+    inviteCodeHint: '注册需要邀请码，请向管理员索取',
     failed: '登录失败',
   },
 

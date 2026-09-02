@@ -105,6 +105,31 @@ const resolveAdmin = () => {
 
 const adminConfig = resolveAdmin();
 
+/**
+ * 注册邀请码。
+ *
+ * 默认跟随管理后台是否启用：邀请码只能从后台生成，后台没开就没人能发码，
+ * 这时默认要求邀请码等于把注册通道焊死。显式设置 INVITE_CODE_REQUIRED 时以配置为准，
+ * 但如果那意味着谁都注册不了，这里要明确警告而不是悄悄降级——
+ * 「关闭注册」本身也是一种合理意图，不该被程序替用户改掉。
+ */
+const resolveInvite = () => {
+  const explicit = process.env.INVITE_CODE_REQUIRED?.trim();
+  const required = readBool(explicit, adminConfig.enabled);
+  if (required && !adminConfig.enabled) {
+    console.warn(
+      '[config] 注册要求邀请码，但管理后台未启用，没有任何途径生成邀请码，注册将无法完成。',
+    );
+  }
+  return {
+    required,
+    /** 生成时的默认有效期，0 表示默认不过期。管理员可在后台逐个覆盖。 */
+    defaultTtlMs: readInt(process.env.INVITE_CODE_TTL_MS, 30 * 24 * 60 * 60 * 1000),
+  };
+};
+
+const inviteConfig = resolveInvite();
+
 export const config = {
   nodeEnv: NODE_ENV,
   isProduction: IS_PRODUCTION,
@@ -144,6 +169,7 @@ export const config = {
     maxSessionsPerUser: readInt(process.env.MAX_SESSIONS_PER_USER, 10),
   },
   admin: adminConfig,
+  invite: inviteConfig,
   room: {
     maxMembers: readInt(process.env.ROOM_MAX_MEMBERS, 6),
     ttlMs: readInt(process.env.ROOM_TTL_MS, 4 * 60 * 60 * 1000),

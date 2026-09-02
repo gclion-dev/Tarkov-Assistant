@@ -15,6 +15,10 @@ const nickname = z
   // eslint-disable-next-line no-control-regex
   .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), '昵称包含非法字符');
 
+// 是否必填由服务端配置决定（config.invite.required），所以 schema 层只做长度兜底，
+// 不在这里写 min(1)：否则关闭邀请码时前端不传该字段也会被拒。
+const inviteCode = z.string().trim().max(64, '邀请码过长').optional();
+
 const email = z
   .string({ required_error: '请填写邮箱' })
   .trim()
@@ -28,7 +32,7 @@ const password = z
   .min(PASSWORD_MIN, `密码至少 ${PASSWORD_MIN} 位`)
   .max(128, '密码最多 128 位');
 
-export const registerSchema = z.object({ email, password, nickname });
+export const registerSchema = z.object({ email, password, nickname, inviteCode });
 
 export const loginSchema = z.object({
   email,

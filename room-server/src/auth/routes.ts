@@ -4,7 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 import config from '../config.js';
 import db from '../db.js';
-import { asyncHandler, conflict, forbidden, unauthorized } from '../http/errors.js';
+import { asyncHandler, badRequest, conflict, forbidden, unauthorized } from '../http/errors.js';
+import {
+  assertInviteCodeUsable,
+  consumeInviteCode,
+  recordInviteUse,
+} from '../invites/store.js';
 import { signAccessToken, verifyRefreshToken } from './jwt.js';
 import { loginLimiter, refreshLimiter, registerLimiter, requireAuth } from './middleware.js';
 import {
@@ -60,27 +65,75 @@ const readRefreshCookie = (cookies: Record<string, string> | undefined) => {
   return token;
 };
 
+interface CreateUserParams {
+  id: string;
+  email: string;
+  nickname: string;
+  passwordHash: string;
+  /** null 表示本次注册不需要邀请码。 */
+  inviteCode: string | null;
+}
+
+/**
+ * 建号与扣邀请码名额放在同一个事务里。
+ *
+ * 拆开做的话两个方向都会出错：先扣码后建号，邮箱撞车时名额白白消耗；
+ * 先建号后扣码，两个人拿同一个一次性码并发注册就都能成功。
+ * 事务里任何一步抛错（邮箱唯一索引冲突、码已失效）都会整体回滚。
+ */
+const createUser = db.transaction((params: CreateUserParams) => {
+  const now = Date.now();
+  const invite = params.inviteCode ? consumeInviteCode(params.inviteCode, now) : null;
+
+  db.prepare('INSERT INTO users (id, email, nickname, password_hash) VALUES (?, ?, ?, ?)').run(
+    params.id,
+    params.email,
+    params.nickname,
+    params.passwordHash,
+  );
+
+  if (invite) {
+    // 依赖上面刚插入的 users 行（invite_code_uses.user_id 有外键），顺序不能调换。
+    recordInviteUse(invite.id, params.id, params.email, now);
+  }
+});
+
+/** 公开配置，前端据此决定注册表单要不要显示邀请码输入框。 */
+router.get('/config', (_req, res) => {
+  res.json({ code: 200, data: { inviteRequired: config.invite.required } });
+});
+
 router.post(
   '/register',
   registerLimiter,
   asyncHandler(async (req, res) => {
-    const { email, password, nickname } = parseBody(registerSchema, req.body);
+    const { email, password, nickname, inviteCode } = parseBody(registerSchema, req.body);
+
+    const requireInvite = config.invite.required;
+    if (requireInvite && !inviteCode) {
+      throw badRequest('请填写邀请码');
+    }
 
     const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email);
     if (existing) {
       throw conflict('该邮箱已注册');
+    }
+    if (requireInvite) {
+      // 先做一次只读预检：码本来就不对时不必再花上百毫秒算 bcrypt。
+      assertInviteCodeUsable(inviteCode!);
     }
 
     const id = uuidv4();
     // 异步版本，避免 hash 计算阻塞事件循环（同一进程还要转发实时位置广播）。
     const passwordHash = await bcrypt.hash(password, config.auth.bcryptRounds);
     try {
-      db.prepare('INSERT INTO users (id, email, nickname, password_hash) VALUES (?, ?, ?, ?)').run(
+      createUser({
         id,
         email,
         nickname,
         passwordHash,
-      );
+        inviteCode: requireInvite ? inviteCode! : null,
+      });
     } catch (err) {
       // 并发注册时唯一索引兜底。
       if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {

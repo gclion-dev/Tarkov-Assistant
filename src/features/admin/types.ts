@@ -22,6 +22,10 @@ export interface AdminStats {
   userRecent: number;
   activeSessions: number;
   rooms: number;
+  /** 注册是否要求邀请码。为 true 且可用余量为 0 时，等于注册已关闭。 */
+  inviteRequired: boolean;
+  /** 未停用、未用完、未过期的邀请码数量。 */
+  inviteAvailable: number;
 }
 
 export interface AdminUserPage {
@@ -40,4 +44,54 @@ export interface AdminUserQuery {
 
 export interface AdminSession {
   username: string;
+}
+
+/** available：还能用；used：名额用完；expired：已过期；disabled：被管理员停用。 */
+export type AdminInviteStatus = 'available' | 'used' | 'expired' | 'disabled';
+
+export interface AdminInviteUse {
+  /** 注册时使用的邮箱。用户被删除后这条记录依然保留。 */
+  email: string;
+  /** 对应用户已被删除时为 null。 */
+  userId: string | null;
+  usedAt: number;
+}
+
+export interface AdminInviteCode {
+  id: string;
+  code: string;
+  note: string | null;
+  maxUses: number;
+  usedCount: number;
+  /** null 表示永不过期。 */
+  expiresAt: number | null;
+  disabled: boolean;
+  status: AdminInviteStatus;
+  createdBy: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+  uses: AdminInviteUse[];
+}
+
+export interface AdminInvitePage {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: AdminInviteCode[];
+  inviteRequired: boolean;
+}
+
+export interface AdminInviteQuery {
+  search?: string;
+  status: 'all' | AdminInviteStatus;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminInviteCreateInput {
+  count: number;
+  maxUses: number;
+  /** 0 表示永不过期；不传则用服务端默认有效期。 */
+  expiresInDays?: number;
+  note?: string;
 }

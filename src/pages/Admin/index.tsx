@@ -15,6 +15,7 @@ import type {
 import { ApiError, getErrorMessage } from '@/features/auth/services/http';
 
 import ConfirmDialog, { type ConfirmRequest } from './components/ConfirmDialog';
+import InvitePanel from './components/InvitePanel';
 
 import './style.less';
 
@@ -84,20 +85,34 @@ const AdminLogin = ({
   );
 };
 
+/** 未启用邀请码时显示「未启用」而不是 0，否则会被误读成「余量耗尽」。 */
+const inviteAvailableText = (stats?: AdminStats) => {
+  if (!stats) {
+    return '—';
+  }
+  return stats.inviteRequired ? stats.inviteAvailable : '未启用';
+};
+
 const StatsBar = ({ stats }: { stats?: AdminStats }) => {
-  const items: Array<{ label: string; value: number | string }> = [
+  const items: Array<{ label: string; value: number | string; warn?: boolean }> = [
     { label: '注册用户', value: stats?.userTotal ?? '—' },
     { label: '正常', value: stats?.userActive ?? '—' },
     { label: '已停用', value: stats?.userDisabled ?? '—' },
     { label: '7 天新增', value: stats?.userRecent ?? '—' },
     { label: '活跃登录设备', value: stats?.activeSessions ?? '—' },
     { label: '进行中的房间', value: stats?.rooms ?? '—' },
+    {
+      label: '可用邀请码',
+      value: inviteAvailableText(stats),
+      // 要求邀请码但一个可用的都没有，等于注册通道关着，值得标红提醒。
+      warn: !!stats?.inviteRequired && stats.inviteAvailable === 0,
+    },
   ];
   return (
     <div className="admin-stats">
       {items.map((item) => (
         <div className="admin-stats-item" key={item.label}>
-          <span className="admin-stats-item-value">{item.value}</span>
+          <span className={`admin-stats-item-value${item.warn ? ' warn' : ''}`}>{item.value}</span>
           <span className="admin-stats-item-label">{item.label}</span>
         </div>
       ))}
@@ -128,6 +143,7 @@ const AdminDashboard = ({
   /** 正在处理中的用户 id，用于禁用该行的按钮防重复点击。 */
   const [busyId, setBusyId] = useState<string>();
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const [tab, setTab] = useState<'users' | 'invites'>('users');
 
   /**
    * 管理会话过期时统一切回登录页。
@@ -158,6 +174,15 @@ const AdminDashboard = ({
       setLoading(false);
     }
   }, [query, handleError]);
+
+  /** 只刷概览。邀请码增删会改变可用余量，但没必要顺带重拉一整页用户列表。 */
+  const refreshStats = useCallback(async () => {
+    try {
+      setStats(await adminApi.stats());
+    } catch (err) {
+      handleError(err, '加载概览失败');
+    }
+  }, [handleError]);
 
   useEffect(() => {
     load();
@@ -288,114 +313,144 @@ const AdminDashboard = ({
 
       <StatsBar stats={stats} />
 
-      <div className="admin-toolbar">
-        <input
-          className="admin-input admin-search"
-          placeholder="搜索邮箱或昵称"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <div className="admin-filters">
-          {STATUS_FILTERS.map((filter) => (
+      <div className="admin-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'users'}
+          className={`admin-tab${tab === 'users' ? ' active' : ''}`}
+          onClick={() => setTab('users')}
+        >
+          用户
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'invites'}
+          className={`admin-tab${tab === 'invites' ? ' active' : ''}`}
+          onClick={() => setTab('invites')}
+        >
+          邀请码
+        </button>
+      </div>
+
+      {tab === 'invites' && <InvitePanel onError={handleError} onChanged={refreshStats} />}
+
+      {tab === 'users' && (
+        <>
+          <div className="admin-toolbar">
+            <input
+              className="admin-input admin-search"
+              placeholder="搜索邮箱或昵称"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            <div className="admin-filters">
+              {STATUS_FILTERS.map((filter) => (
+                <button
+                  type="button"
+                  key={filter.value}
+                  className={`admin-filter${query.status === filter.value ? ' active' : ''}`}
+                  onClick={() => setQuery((prev) => ({ ...prev, status: filter.value, page: 1 }))}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+            <span className="admin-total">共 {total} 个用户</span>
+          </div>
+
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>邮箱</th>
+                  <th>昵称</th>
+                  <th>状态</th>
+                  <th>注册时间</th>
+                  <th>登录设备</th>
+                  <th>设置同步</th>
+                  <th className="admin-table-actions-head">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 && (
+                  <tr>
+                    <td className="admin-empty" colSpan={7}>
+                      {loading ? '加载中...' : '没有符合条件的用户'}
+                    </td>
+                  </tr>
+                )}
+                {users.map((user) => (
+                  <tr
+                    key={user.id}
+                    className={user.status === 'disabled' ? 'is-disabled' : undefined}
+                  >
+                    <td className="admin-mono">{user.email}</td>
+                    <td>{user.nickname}</td>
+                    <td>
+                      <span className={`admin-badge ${user.status}`}>
+                        {user.status === 'active' ? '正常' : '已停用'}
+                      </span>
+                    </td>
+                    <td className="admin-mono">{formatTime(user.createdAt)}</td>
+                    <td className="admin-mono">{user.activeSessions}</td>
+                    <td className="admin-mono">{formatTime(user.prefsUpdatedAt)}</td>
+                    <td className="admin-table-actions">
+                      <button
+                        type="button"
+                        className="admin-ghost"
+                        disabled={busyId === user.id}
+                        onClick={() => handleToggleStatus(user)}
+                      >
+                        {user.status === 'active' ? '停用' : '恢复'}
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-ghost"
+                        disabled={busyId === user.id || user.activeSessions === 0}
+                        onClick={() => handleForceLogout(user)}
+                      >
+                        强制下线
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-ghost danger"
+                        disabled={busyId === user.id}
+                        onClick={() => handleDelete(user)}
+                      >
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="admin-pager">
             <button
               type="button"
-              key={filter.value}
-              className={`admin-filter${query.status === filter.value ? ' active' : ''}`}
-              onClick={() => setQuery((prev) => ({ ...prev, status: filter.value, page: 1 }))}
+              className="admin-ghost"
+              disabled={query.page <= 1 || loading}
+              onClick={() => setQuery((prev) => ({ ...prev, page: prev.page - 1 }))}
             >
-              {filter.label}
+              上一页
             </button>
-          ))}
-        </div>
-        <span className="admin-total">共 {total} 个用户</span>
-      </div>
-
-      <div className="admin-table-wrap">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>邮箱</th>
-              <th>昵称</th>
-              <th>状态</th>
-              <th>注册时间</th>
-              <th>登录设备</th>
-              <th>设置同步</th>
-              <th className="admin-table-actions-head">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 && (
-              <tr>
-                <td className="admin-empty" colSpan={7}>
-                  {loading ? '加载中...' : '没有符合条件的用户'}
-                </td>
-              </tr>
-            )}
-            {users.map((user) => (
-              <tr key={user.id} className={user.status === 'disabled' ? 'is-disabled' : undefined}>
-                <td className="admin-mono">{user.email}</td>
-                <td>{user.nickname}</td>
-                <td>
-                  <span className={`admin-badge ${user.status}`}>
-                    {user.status === 'active' ? '正常' : '已停用'}
-                  </span>
-                </td>
-                <td className="admin-mono">{formatTime(user.createdAt)}</td>
-                <td className="admin-mono">{user.activeSessions}</td>
-                <td className="admin-mono">{formatTime(user.prefsUpdatedAt)}</td>
-                <td className="admin-table-actions">
-                  <button
-                    type="button"
-                    className="admin-ghost"
-                    disabled={busyId === user.id}
-                    onClick={() => handleToggleStatus(user)}
-                  >
-                    {user.status === 'active' ? '停用' : '恢复'}
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-ghost"
-                    disabled={busyId === user.id || user.activeSessions === 0}
-                    onClick={() => handleForceLogout(user)}
-                  >
-                    强制下线
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-ghost danger"
-                    disabled={busyId === user.id}
-                    onClick={() => handleDelete(user)}
-                  >
-                    删除
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="admin-pager">
-        <button
-          type="button"
-          className="admin-ghost"
-          disabled={query.page <= 1 || loading}
-          onClick={() => setQuery((prev) => ({ ...prev, page: prev.page - 1 }))}
-        >
-          上一页
-        </button>
-        <span className="admin-pager-info">
-          {query.page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          className="admin-ghost"
-          disabled={query.page >= totalPages || loading}
-          onClick={() => setQuery((prev) => ({ ...prev, page: prev.page + 1 }))}
-        >
-          下一页
-        </button>
-      </div>
+            <span className="admin-pager-info">
+              {query.page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="admin-ghost"
+              disabled={query.page >= totalPages || loading}
+              onClick={() => setQuery((prev) => ({ ...prev, page: prev.page + 1 }))}
+            >
+              下一页
+            </button>
+          </div>
+        </>
+      )}
 
       <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
     </div>

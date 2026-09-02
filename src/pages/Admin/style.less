@@ -147,10 +147,40 @@
   &-value {
     color: #ffffff;
     font-size: 22px;
+    // 要求邀请码但余量为 0 时标红：这种状态下注册通道实际是关着的。
+    &.warn {
+      color: #ff8888;
+    }
   }
   &-label {
     color: #777777;
     font-size: 12px;
+  }
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 24px;
+  border-bottom: 2px solid #2c2c2c;
+}
+
+.admin-tab {
+  padding: 10px 18px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  color: #888888;
+  font-size: 14px;
+  font-family: inherit;
+  background: none;
+  cursor: pointer;
+  &.active {
+    border-bottom-color: #288828;
+    color: #ffffff;
+  }
+  &:hover:not(.active) {
+    color: #cccccc;
   }
 }
 
@@ -330,4 +360,120 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+// ── 邀请码面板 ──────────────────────────────────────────────────
+
+.admin-invite-notice {
+  margin: 20px 0 0;
+  padding: 12px 14px;
+  border: 2px solid #2c2c2c;
+  border-left: 4px solid #886628;
+  border-radius: 4px;
+  color: #bbaa77;
+  font-size: 13px;
+  line-height: 1.7;
+  background-color: #1c1c1c;
+}
+
+.admin-invite-create {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding: 16px;
+  border: 2px solid #2c2c2c;
+  border-radius: 8px;
+  background-color: #1c1c1c;
+}
+
+.admin-invite-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 150px;
+  &-label {
+    color: #888888;
+    font-size: 12px;
+  }
+}
+
+// 备注可以写得长一点，占满剩余宽度。
+.admin-invite-field-wide {
+  flex: 1;
+  min-width: 200px;
+  width: auto;
+}
+
+.admin-invite-submit {
+  width: auto;
+  padding: 10px 20px;
+  white-space: nowrap;
+}
+
+.admin-invite-fresh {
+  margin-top: 16px;
+  padding: 16px;
+  border: 2px solid #288828;
+  border-radius: 8px;
+  background-color: #28882811;
+}
+
+.admin-invite-fresh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.admin-invite-fresh-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-invite-fresh-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.admin-invite-chip {
+  padding: 6px 12px;
+  border: 2px solid #2c2c2c;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 1px;
+  background-color: #121212;
+  cursor: pointer;
+  &:hover {
+    border-color: #288828;
+  }
+}
+
+// 表格里的码本身就是复制按钮，所以去掉按钮外观只留下可点击的提示。
+.admin-invite-code {
+  padding: 0;
+  border: none;
+  color: #dddddd;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 1px;
+  background: none;
+  cursor: pointer;
+  &:hover {
+    color: #88dd88;
+  }
+}
+
+// 多个使用者时只显示第一个，完整名单挂在 title 上，避免撑破表格。
+.admin-invite-uses {
+  cursor: help;
+  border-bottom: 1px dotted #555555;
 }

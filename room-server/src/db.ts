@@ -45,6 +45,43 @@ db.exec(`
     version    INTEGER NOT NULL DEFAULT 1,
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
   );
+
+  -- 注册邀请码，由管理后台生成与维护。
+  -- 明文存储而不是存 hash：管理员必须能把码原样再看一遍、再发给别人，
+  -- 这一点和用户口令的取舍正好相反。它也不是长期凭证，用完即失效。
+  --
+  -- 用 used_count / max_uses 而不是布尔 used 字段，是为了同时表达
+  -- 「一次性邀请」和「一个码开放 N 个名额」两种用法。
+  CREATE TABLE IF NOT EXISTS invite_codes (
+    id           TEXT PRIMARY KEY,
+    code         TEXT NOT NULL,
+    -- 管理员写给自己看的备注，例如「给某个小队」。
+    note         TEXT,
+    max_uses     INTEGER NOT NULL DEFAULT 1,
+    used_count   INTEGER NOT NULL DEFAULT 0,
+    -- NULL 表示不过期。
+    expires_at   INTEGER,
+    -- 手动停用。与「用完」「过期」区分开，管理员才能临时冻结再放开。
+    disabled     INTEGER NOT NULL DEFAULT 0,
+    created_by   TEXT NOT NULL,
+    created_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+    last_used_at INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_invite_codes_created ON invite_codes(created_at);
+
+  -- 邀请码的使用流水，用于回答「这个码是谁用掉的」。
+  -- user_id 用 SET NULL：管理后台删除用户是硬删除，但那条使用记录仍应留在审计里。
+  CREATE TABLE IF NOT EXISTS invite_code_uses (
+    id       TEXT PRIMARY KEY,
+    code_id  TEXT NOT NULL REFERENCES invite_codes(id) ON DELETE CASCADE,
+    user_id  TEXT REFERENCES users(id) ON DELETE SET NULL,
+    -- 冗余存一份注册时的邮箱，用户被删掉之后记录依然可读。
+    email    TEXT NOT NULL,
+    used_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_invite_code_uses_code ON invite_code_uses(code_id);
 `);
 
 const ensureColumn = (table: string, column: string, definition: string) => {
@@ -91,6 +128,11 @@ ensureIndex(
 ensureIndex(
   'CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id)',
   'family 索引',
+);
+// 邀请码全局唯一，注册时按 code 精确命中。
+ensureIndex(
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code)',
+  '存在重复邀请码',
 );
 
 export default db;

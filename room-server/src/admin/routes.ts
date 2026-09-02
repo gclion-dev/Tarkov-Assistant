@@ -8,6 +8,15 @@ import { parseBody } from '../auth/validators.js';
 import config from '../config.js';
 import db from '../db.js';
 import { asyncHandler, badRequest, notFound, unauthorized } from '../http/errors.js';
+import {
+  countAvailableInviteCodes,
+  createInviteCodes,
+  deleteInviteCode,
+  findInviteCodeById,
+  listInviteCodes,
+  setInviteCodeDisabled,
+  toInviteCodeView,
+} from '../invites/store.js';
 import { countRooms } from '../room/manager.js';
 import { disconnectUserSockets } from '../room/socket.js';
 import {
@@ -19,6 +28,10 @@ import {
 } from './middleware.js';
 import {
   adminLoginSchema,
+  inviteCodeCreateSchema,
+  inviteCodeIdSchema,
+  inviteCodeListQuerySchema,
+  inviteCodeStatusSchema,
   userIdSchema,
   userListQuerySchema,
   userStatusSchema,
@@ -132,6 +145,10 @@ router.get('/stats', (_req, res) => {
       activeSessions: sessions.total,
       /** 内存中的房间数。 */
       rooms: countRooms(),
+      /** 注册是否要求邀请码，决定前端要不要提示「余量为 0 时没人能注册」。 */
+      inviteRequired: config.invite.required,
+      /** 当前还能用的邀请码数量（未停用、未用完、未过期）。 */
+      inviteAvailable: countAvailableInviteCodes(),
     },
   });
 });
@@ -274,6 +291,75 @@ router.delete('/users/:id', (req, res) => {
   db.prepare('DELETE FROM users WHERE id = ?').run(id);
   const disconnected = disconnectUserSockets(id, '账号已被删除');
   res.json({ code: 200, data: { id, email: user.email, disconnected } });
+});
+
+// ── 邀请码 ────────────────────────────────────────────────────────
+// 挂在 requireAdmin 之后，因此这几条都已经要求有效的管理会话。
+
+const parseInviteCodeId = (raw: unknown) => {
+  const parsed = inviteCodeIdSchema.safeParse({ id: raw });
+  if (!parsed.success) {
+    throw badRequest('邀请码 id 不合法');
+  }
+  return parsed.data.id;
+};
+
+router.get('/invite-codes', (req, res) => {
+  const parsed = inviteCodeListQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw badRequest(parsed.error.issues[0]?.message || '查询参数不合法');
+  }
+  res.json({
+    code: 200,
+    data: {
+      ...listInviteCodes(parsed.data),
+      /** 一并回带全局开关，前端不必再单独请求一次 /stats。 */
+      inviteRequired: config.invite.required,
+    },
+  });
+});
+
+router.post('/invite-codes', (req, res) => {
+  const { count, maxUses, expiresInDays, note } = parseBody(inviteCodeCreateSchema, req.body);
+
+  // 未指定有效期时用服务端默认值；显式传 0 表示永不过期。
+  const days =
+    expiresInDays === undefined ? config.invite.defaultTtlMs / (24 * 60 * 60 * 1000) : expiresInDays;
+  const expiresAt = days > 0 ? Date.now() + days * 24 * 60 * 60 * 1000 : null;
+
+  const created = createInviteCodes({
+    count,
+    maxUses,
+    note: note || null,
+    expiresAt,
+    createdBy: req.admin!.sub,
+  });
+
+  res.json({ code: 200, data: { items: created } });
+});
+
+router.patch('/invite-codes/:id', (req, res) => {
+  const id = parseInviteCodeId(req.params.id);
+  const { disabled } = parseBody(inviteCodeStatusSchema, req.body);
+
+  const row = findInviteCodeById(id);
+  if (!row) {
+    throw notFound('邀请码不存在');
+  }
+  setInviteCodeDisabled(id, disabled);
+
+  const updated = findInviteCodeById(id)!;
+  res.json({ code: 200, data: toInviteCodeView(updated) });
+});
+
+router.delete('/invite-codes/:id', (req, res) => {
+  const id = parseInviteCodeId(req.params.id);
+  const row = findInviteCodeById(id);
+  if (!row) {
+    throw notFound('邀请码不存在');
+  }
+  deleteInviteCode(id);
+  res.json({ code: 200, data: { id, code: row.code } });
 });
 
 export default router;

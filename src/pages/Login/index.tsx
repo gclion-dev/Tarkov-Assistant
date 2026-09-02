@@ -1,10 +1,11 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
 import { useRecoilState } from 'recoil';
 
 import useAuth from '@/features/auth/hooks/useAuth';
+import { authApi } from '@/features/auth/services/authApi';
 import { getErrorMessage } from '@/features/auth/services/http';
 import useI18N from '@/i18n';
 import langState from '@/store/lang';
@@ -14,6 +15,8 @@ import './style.less';
 /** 与服务端 validators.ts 保持一致。 */
 const PASSWORD_MIN = 8;
 const NICKNAME_MAX = 20;
+/** 与服务端 invites/store.ts 的 INVITE_CODE_LENGTH 保持一致。 */
+const INVITE_CODE_LENGTH = 12;
 
 const Login = () => {
   const navigate = useNavigate();
@@ -26,10 +29,34 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * 注册是否需要邀请码由服务端配置决定，前端不能硬编码。
+   * 取不到时按「不需要」处理：真的需要时服务端仍会拦下来并给出提示，
+   * 反过来（配置读取失败就多出一个必填框）会让本可以正常注册的人卡住。
+   */
+  const [inviteRequired, setInviteRequired] = useState(false);
 
   const state = location.state as { from?: string; pendingAction?: unknown } | null;
   const from = state?.from || '/interactive';
+
+  useEffect(() => {
+    let cancelled = false;
+    authApi
+      .config()
+      .then((cfg) => {
+        if (!cancelled) {
+          setInviteRequired(!!cfg.inviteRequired);
+        }
+      })
+      .catch(() => {
+        // 静默失败：登录本身不依赖这个配置，不该为此弹一个用户无法处理的错误。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -38,7 +65,7 @@ const Login = () => {
       if (mode === 'login') {
         await login(email, password);
       } else {
-        await register(email, password, nickname);
+        await register(email, password, nickname, inviteRequired ? inviteCode : undefined);
       }
       // 把待续做的操作透传回来源页面（例如登录后自动创建房间）。
       navigate(from, { replace: true, state: { pendingAction: state?.pendingAction } });
@@ -98,6 +125,29 @@ const Login = () => {
             minLength={PASSWORD_MIN}
           />
           {mode === 'register' && <p className="auth-hint">{t('login.passwordHint')}</p>}
+          {mode === 'register' && inviteRequired && (
+            <>
+              <input
+                className="auth-input auth-input-code"
+                placeholder={t('login.inviteCode')}
+                value={inviteCode}
+                // 大写并过滤掉字符表以外的字符，与服务端归一化规则一致，
+                // 这样粘贴带连字符或空格的码也能直接提交。
+                onChange={(e) =>
+                  setInviteCode(
+                    e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-HJ-NP-Z2-9]/g, '')
+                      .slice(0, INVITE_CODE_LENGTH),
+                  )
+                }
+                autoComplete="off"
+                spellCheck={false}
+                required
+              />
+              <p className="auth-hint">{t('login.inviteCodeHint')}</p>
+            </>
+          )}
           <button className="button button-default auth-submit" type="submit" disabled={submitting}>
             {mode === 'login' ? t('login.loginBtn') : t('login.registerBtn')}
           </button>
