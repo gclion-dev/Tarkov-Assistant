@@ -36,6 +36,14 @@ services:
       DB_PATH: /app/data/room.db
       JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-30m}
       JWT_REFRESH_EXPIRES: ${JWT_REFRESH_EXPIRES:-7d}
+      # 管理后台（前端路由 /admin_zds）。两个密码变量都留空时 /api/admin 停用，
+      # 所以不填这几项的部署与之前行为一致。
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin_zds}
+      # bcrypt hash 优先，明文口令不必进 .env。注意 compose 会做变量插值，
+      # hash 里的 $ 在 .env 中要写成 $$，否则 $2a 会被当成变量吃掉。
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_SESSION_TTL_MS: ${ADMIN_SESSION_TTL_MS:-7200000}
     volumes:
       - room-data:/app/data
     restart: unless-stopped
