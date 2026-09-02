@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import { z } from 'zod';
 
 import { verifyAccessToken } from '../auth/jwt.js';
+import { isUserActive } from '../auth/users.js';
 import config from '../config.js';
 import {
   createRoom,
@@ -49,6 +50,32 @@ const QUOTA_WINDOW_MS = 10 * 1000;
 
 const getData = (socket: Socket) => socket.data as SocketData;
 
+/**
+ * setupRoomSocket 建立的 io 引用，供管理后台强制踢人使用。
+ * 不把 io 传进 admin 路由，是为了避免路由层依赖 socket 层的完整实现。
+ */
+let ioRef: Server | null = null;
+
+/**
+ * 断开某个账号的全部连接。管理员停用账号或强制下线时调用。
+ *
+ * 不需要在这里手动清理房间：断开会触发各 socket 自己的 disconnect 处理，
+ * 那里已经有「最后一个连接断开才算离开房间」并广播房间状态的逻辑。
+ */
+export const disconnectUserSockets = (userId: string, message: string) => {
+  if (!ioRef) {
+    return 0;
+  }
+  const sockets = Array.from(ioRef.sockets.sockets.values()).filter(
+    (item) => (item.data as SocketData).userId === userId,
+  );
+  sockets.forEach((socket) => {
+    socket.emit('room:error', { message });
+    socket.disconnect(true);
+  });
+  return sockets.length;
+};
+
 /** 超出配额直接断开，返回 true 表示本次事件应被丢弃。 */
 const exceedsQuota = (socket: Socket) => {
   const data = getData(socket);
@@ -86,6 +113,8 @@ const handle =
   };
 
 export const setupRoomSocket = (io: Server) => {
+  ioRef = io;
+
   const socketsOfUser = (userId: string) =>
     Array.from(io.sockets.sockets.values()).filter(
       (item) => (item.data as SocketData).userId === userId,
@@ -132,6 +161,11 @@ export const setupRoomSocket = (io: Server) => {
     }
     try {
       const payload = verifyAccessToken(token);
+      // 被停用的账号不能再建/进房间，也不能继续广播位置。
+      if (!isUserActive(payload.sub)) {
+        next(new Error('Forbidden'));
+        return;
+      }
       Object.assign(socket.data as SocketData, {
         userId: payload.sub,
         nickname: payload.nickname,

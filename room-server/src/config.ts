@@ -51,6 +51,60 @@ const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:8001')
   .map((item) => item.trim())
   .filter(Boolean);
 
+/**
+ * 管理后台的凭据。
+ *
+ * 管理员刻意不是 users 表里的一行：它不参与注册/找回密码，也不该出现在用户列表里，
+ * 更不该因为数据库被写坏而多出一个管理员。凭据只来自环境变量。
+ *
+ * 未配置密码时整个 /api/admin 直接关停（fail closed）。
+ * 否则一个忘记设置环境变量的部署会白送一个空口令的管理后台。
+ */
+const resolveAdmin = () => {
+  const username = process.env.ADMIN_USERNAME?.trim() || 'admin_zds';
+  // bcrypt hash 优先：这样 .env 里不出现明文口令。
+  const passwordHash = process.env.ADMIN_PASSWORD_HASH?.trim() || '';
+  const password = process.env.ADMIN_PASSWORD ?? '';
+
+  // 管理会话的 cookie 限定在 /api/admin 下，且 SameSite=Strict，
+  // 不会随普通用户请求一起外发，也不会被跨站请求携带。
+  const cookie = { name: 'admin_session', path: '/api/admin' };
+
+  if (!passwordHash && !password) {
+    console.warn(
+      '[config] 未配置 ADMIN_PASSWORD_HASH / ADMIN_PASSWORD，管理后台 /api/admin 已停用。',
+    );
+    return {
+      enabled: false as const,
+      username,
+      passwordHash: '',
+      password: '',
+      sessionTtlMs: 0,
+      cookie,
+    };
+  }
+  if (!passwordHash && IS_PRODUCTION && password.length < 12) {
+    throw new Error('生产环境的 ADMIN_PASSWORD 至少需要 12 个字符，或改用 ADMIN_PASSWORD_HASH。');
+  }
+  if (!passwordHash) {
+    console.warn(
+      '[config] 正在使用明文 ADMIN_PASSWORD。建议改用 ADMIN_PASSWORD_HASH（bcrypt）以免口令以明文留在 .env 里。',
+    );
+  }
+
+  return {
+    enabled: true as const,
+    username,
+    passwordHash,
+    password,
+    // 管理会话故意比用户会话短，且不做刷新轮转，过期就重新登录。
+    sessionTtlMs: readInt(process.env.ADMIN_SESSION_TTL_MS, 2 * 60 * 60 * 1000),
+    cookie,
+  };
+};
+
+const adminConfig = resolveAdmin();
+
 export const config = {
   nodeEnv: NODE_ENV,
   isProduction: IS_PRODUCTION,
@@ -71,6 +125,8 @@ export const config = {
   jwt: {
     accessSecret: deriveKey('access-token'),
     refreshSecret: deriveKey('refresh-token'),
+    // 管理会话再派生一个独立密钥，普通用户的 token 无论如何都不可能被当成管理凭证。
+    adminSecret: deriveKey('admin-session'),
     accessExpires: process.env.JWT_ACCESS_EXPIRES || '30m',
     refreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
   },
@@ -87,6 +143,7 @@ export const config = {
     bcryptRounds: readInt(process.env.BCRYPT_ROUNDS, 10),
     maxSessionsPerUser: readInt(process.env.MAX_SESSIONS_PER_USER, 10),
   },
+  admin: adminConfig,
   room: {
     maxMembers: readInt(process.env.ROOM_MAX_MEMBERS, 6),
     ttlMs: readInt(process.env.ROOM_TTL_MS, 4 * 60 * 60 * 1000),

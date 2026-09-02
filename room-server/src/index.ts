@@ -6,12 +6,14 @@ import express from 'express';
 import helmet from 'helmet';
 import { Server } from 'socket.io';
 
+import adminRoutes from './admin/routes.js';
 import authRoutes from './auth/routes.js';
 import { startSessionCleanup } from './auth/sessions.js';
 // config 必须在其他业务模块之前被求值，它内部完成 dotenv 加载。
 import config from './config.js';
 import db from './db.js';
 import { errorHandler } from './http/errors.js';
+import preferencesRoutes from './preferences/routes.js';
 import { startRoomCleanup } from './room/manager.js';
 import { setupRoomSocket } from './room/socket.js';
 
@@ -43,6 +45,8 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/preferences', preferencesRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ code: 404, errorMessage: '接口不存在' });

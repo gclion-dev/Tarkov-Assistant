@@ -28,6 +28,21 @@
         width: 100%;
         color: #ff8828;
       }
+      // 「点击恢复监听」用 button 承载，保证键盘可聚焦、可回车触发，
+      // 外观则与旁边的纯文字提示保持一致。
+      &.as-link {
+        padding: 0;
+        border: none;
+        font: inherit;
+        text-align: left;
+        text-decoration: underline;
+        background: none;
+        cursor: pointer;
+        &:hover,
+        &:focus-visible {
+          color: #ffb060;
+        }
+      }
     }
     * {
       vertical-align: top;

@@ -15,11 +15,26 @@ interface MapInfoProps {
   raidInfo?: InteractiveMap.RaidLogProps;
   directoryHandler?: FileSystemDirectoryHandle;
   tarkovGamePathHandler?: FileSystemDirectoryHandle;
+  /** 目录还记着，只差一次用户手势去拿授权。 */
+  directoryPending?: boolean;
+  tarkovGamePathPending?: boolean;
+  onClickEftWatcherPath?: () => void;
+  onClickTarkovGamePath?: () => void;
   show: boolean;
 }
 
 const Index = (props: MapInfoProps) => {
-  const { mapData, raidInfo, directoryHandler, tarkovGamePathHandler, show } = props;
+  const {
+    mapData,
+    raidInfo,
+    directoryHandler,
+    tarkovGamePathHandler,
+    directoryPending,
+    tarkovGamePathPending,
+    onClickEftWatcherPath,
+    onClickTarkovGamePath,
+    show,
+  } = props;
 
   const [realTime, setRealTime] = useState(0);
   const [timeDiff, setTimeDiff] = useState(0);
@@ -73,12 +88,37 @@ const Index = (props: MapInfoProps) => {
       )}
       {self === top && window.showDirectoryPicker && !directoryHandler && (
         <div className="im-mapinfo-item">
-          <span className="im-mapinfo-item-title warning">尚未监听截图目录，无法自动获取坐标</span>
+          {directoryPending ? (
+            // 目录还记着，点一下授权即可，不用重新翻文件夹。
+            <button
+              type="button"
+              className="im-mapinfo-item-title warning as-link"
+              onClick={() => onClickEftWatcherPath?.()}
+            >
+              点击恢复监听截图目录
+            </button>
+          ) : (
+            <span className="im-mapinfo-item-title warning">
+              尚未监听截图目录，无法自动获取坐标
+            </span>
+          )}
         </div>
       )}
       {self === top && window.showDirectoryPicker && !tarkovGamePathHandler && (
         <div className="im-mapinfo-item">
-          <span className="im-mapinfo-item-title warning">尚未监听游戏目录，无法获取战局信息</span>
+          {tarkovGamePathPending ? (
+            <button
+              type="button"
+              className="im-mapinfo-item-title warning as-link"
+              onClick={() => onClickTarkovGamePath?.()}
+            >
+              点击恢复监听游戏目录
+            </button>
+          ) : (
+            <span className="im-mapinfo-item-title warning">
+              尚未监听游戏目录，无法获取战局信息
+            </span>
+          )}
         </div>
       )}
       {raidInfo?.ip && raidInfo?.port && (

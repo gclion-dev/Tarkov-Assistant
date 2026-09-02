@@ -11,13 +11,43 @@ import './style.less';
 interface EFTWatcherProps {
   directoryHandler?: FileSystemDirectoryHandle;
   tarkovGamePathHandler?: FileSystemDirectoryHandle;
+  /** 目录还记着，只差一次用户手势去拿授权。 */
+  directoryPending?: boolean;
+  tarkovGamePathPending?: boolean;
+  /** 目录句柄的恢复流程是否已经结束。为 false 时不自动弹窗，避免闪一下。 */
+  ready?: boolean;
   onClickEftWatcherPath: () => void;
   onClickTarkovGamePath: () => void;
 }
 
+/** 未绑定 / 待授权 / 已监听 三态的按钮颜色。 */
+const stateColor = (active: boolean, pending?: boolean) => {
+  if (active) return '#288828';
+  if (pending) return '#ffff88';
+  return '#ffffff';
+};
+
+/** 三态的按钮文案。待授权时提示「恢复」，让用户知道不用重新翻文件夹。 */
+const stateLabel = (
+  active: boolean,
+  pending: boolean | undefined,
+  labels: { active: string; pending: string; idle: string },
+) => {
+  if (active) return labels.active;
+  if (pending) return labels.pending;
+  return labels.idle;
+};
+
 const Index = (props: EFTWatcherProps) => {
-  const { directoryHandler, tarkovGamePathHandler, onClickEftWatcherPath, onClickTarkovGamePath } =
-    props;
+  const {
+    directoryHandler,
+    tarkovGamePathHandler,
+    directoryPending,
+    tarkovGamePathPending,
+    ready,
+    onClickEftWatcherPath,
+    onClickTarkovGamePath,
+  } = props;
 
   const [show, setShow] = useState(false);
 
@@ -46,10 +76,16 @@ const Index = (props: EFTWatcherProps) => {
   }, [directoryHandler, tarkovGamePathHandler]);
 
   useEffect(() => {
-    if (self === top) {
+    if (self !== top || !ready) {
+      return;
+    }
+    // 等目录恢复的结果出来再决定要不要弹。
+    // 两个目录都已经恢复好的用户不需要再看这个引导；不支持该 API 的浏览器仍然要看到说明。
+    const allBound = !!directoryHandler && !!tarkovGamePathHandler;
+    if (!allBound) {
       setShow(true);
     }
-  }, []);
+  }, [ready]);
 
   return (
     <div
@@ -68,28 +104,39 @@ const Index = (props: EFTWatcherProps) => {
           <span>{t('eftwatcher.tips3')}</span>
           <span style={{ color: '#ffff88' }}>{t('eftwatcher.tips4')}</span>
           <span style={{ color: '#ffff88' }}>{t('eftwatcher.tips5')}</span>
+          {/* 轻提示而非强引导：不装也能用，装了目录授权可长期保留。 */}
+          <span style={{ color: '#88ccff' }}>{t('eftwatcher.tips6')}</span>
         </div>
         <div className="im-eftwatcher-buttons">
           {window.showDirectoryPicker ? (
             <button
-              style={{ color: !directoryHandler ? '#ffffff' : '#288828' }}
+              style={{ color: stateColor(!!directoryHandler, directoryPending) }}
               className="button button-default"
               onClick={() => handleClickEftWatcherPath()}
             >
-              {directoryHandler ? t('eftwatcher.disableScrPath') : t('eftwatcher.enableScrPath')}
+              {stateLabel(!!directoryHandler, directoryPending, {
+                active: t('eftwatcher.disableScrPath'),
+                pending: t('eftwatcher.resumeScrPath'),
+                idle: t('eftwatcher.enableScrPath'),
+              })}
             </button>
           ) : (
             <button className="button button-default">{t('eftwatcher.unsupport')}</button>
           )}
           {window.showDirectoryPicker && (
             <button
-              style={{ marginTop: 16, color: !tarkovGamePathHandler ? '#ffffff' : '#288828' }}
+              style={{
+                marginTop: 16,
+                color: stateColor(!!tarkovGamePathHandler, tarkovGamePathPending),
+              }}
               className="button button-default"
               onClick={() => handleClickTarkovGamePath()}
             >
-              {tarkovGamePathHandler
-                ? t('eftwatcher.disableGamePath')
-                : t('eftwatcher.enableGamePath')}
+              {stateLabel(!!tarkovGamePathHandler, tarkovGamePathPending, {
+                active: t('eftwatcher.disableGamePath'),
+                pending: t('eftwatcher.resumeGamePath'),
+                idle: t('eftwatcher.enableGamePath'),
+              })}
             </button>
           )}
           <button

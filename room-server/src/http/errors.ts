@@ -13,7 +13,11 @@ export class HttpError extends Error {
 
 export const badRequest = (message: string) => new HttpError(400, message);
 export const unauthorized = (message: string) => new HttpError(401, message);
+/** 身份有效但没有权限，或账号已被停用。与 401 区分开，前端才能决定是否要跳登录。 */
+export const forbidden = (message: string) => new HttpError(403, message);
+export const notFound = (message: string) => new HttpError(404, message);
 export const conflict = (message: string) => new HttpError(409, message);
+export const serviceUnavailable = (message: string) => new HttpError(503, message);
 
 /** 包裹 async 处理器，把 rejected promise 交给 express 的错误处理链，避免请求悬挂。 */
 export const asyncHandler =

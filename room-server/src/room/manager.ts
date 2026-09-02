@@ -217,6 +217,9 @@ export const cleanupExpiredRooms = () => {
  * 定时清理由调用方显式启动，而不是 import 时的副作用，
  * 这样进程可以干净退出，也便于单独测试 manager。
  */
+/** 当前内存中的房间数，供管理后台展示。 */
+export const countRooms = () => rooms.size;
+
 export const startRoomCleanup = () => {
   const timer = setInterval(cleanupExpiredRooms, 60 * 1000);
   timer.unref();

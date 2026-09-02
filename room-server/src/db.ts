@@ -34,6 +34,17 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+
+  -- 用户界面偏好（当前地图、楼层、各图层开关等）。
+  -- 整体读写、只属于单个用户、不需要按字段查询，所以用单行 JSON 而不是 key-value 多行：
+  -- 读写各一条 SQL，将来新增偏好项也不用改表。
+  -- version 同时用于乐观锁（多设备并发写）和 payload 结构版本迁移。
+  CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id    TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    payload    TEXT NOT NULL,
+    version    INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+  );
 `);
 
 const ensureColumn = (table: string, column: string, definition: string) => {
@@ -52,6 +63,11 @@ ensureColumn('refresh_tokens', 'revoke_reason', 'TEXT');
 ensureColumn('refresh_tokens', 'family_id', 'TEXT');
 ensureColumn('refresh_tokens', 'created_at', 'INTEGER NOT NULL DEFAULT 0');
 db.exec('UPDATE refresh_tokens SET family_id = id WHERE family_id IS NULL');
+
+// 账号状态，由管理后台维护。'active' | 'disabled'。
+// 存量用户默认 active，所以加字段对现有部署无感。
+ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'");
+ensureColumn('users', 'status_updated_at', 'INTEGER');
 
 // 唯一索引对历史数据可能失败（例如旧库里已存在大小写不同的重复邮箱），
 // 这种情况下只告警，不阻塞服务启动。

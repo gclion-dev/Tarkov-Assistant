@@ -99,8 +99,10 @@ export default {
     title: '高级设置',
     realtimeMarker: '截图目录:',
     enableMarker: '选择塔科夫截图目录',
+    resumeMarker: '点击恢复监听截图目录',
     tarkovGamePath: '游戏目录:',
     enableTarkovGamePath: '选择塔科夫游戏目录',
+    resumeTarkovGamePath: '点击恢复监听游戏目录',
     markerScale: '标点缩放',
   },
 
@@ -158,12 +160,15 @@ export default {
     tips4: '参考截图目录: C:\\Users\\[User]\\Documents\\Escape from Tarkov',
     tips5: '参考游戏目录: C:\\Games\\EFT\\Logs',
     enableScrPath: '选择塔科夫截图目录',
+    resumeScrPath: '点击恢复监听截图目录',
     disableScrPath: '已监听塔科夫截图目录',
     enableGamePath: '选择塔科夫游戏目录',
+    resumeGamePath: '点击恢复监听游戏目录',
     disableGamePath: '已监听塔科夫游戏目录',
     unsupport: '您的浏览器版本不支持',
     later: '我已知晓，可在设置中启用',
     unsupportMsg: '您的浏览器版本不支援该功能，请使用Chrome或Edge！',
+    tips6: '将本站安装为应用后（地址栏右侧的安装按钮），目录授权可长期保留，无需反复选择。',
   },
 
   // 警告和说明

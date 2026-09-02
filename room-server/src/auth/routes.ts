@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import config from '../config.js';
 import db from '../db.js';
-import { asyncHandler, conflict, unauthorized } from '../http/errors.js';
+import { asyncHandler, conflict, forbidden, unauthorized } from '../http/errors.js';
 import { signAccessToken, verifyRefreshToken } from './jwt.js';
 import { loginLimiter, refreshLimiter, registerLimiter, requireAuth } from './middleware.js';
 import {
@@ -23,12 +23,15 @@ interface UserRow {
   id: string;
   email: string;
   nickname: string;
+  status?: string;
 }
 
 const toUser = (row: UserRow) => ({ id: row.id, email: row.email, nickname: row.nickname });
 
 const findUserById = (id: string) =>
-  db.prepare('SELECT id, email, nickname FROM users WHERE id = ?').get(id) as UserRow | undefined;
+  db.prepare('SELECT id, email, nickname, status FROM users WHERE id = ?').get(id) as
+    | UserRow
+    | undefined;
 
 const setRefreshCookie = (res: Response, token: string) => {
   res.cookie(config.cookie.name, token, {
@@ -98,12 +101,18 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, password } = parseBody(loginSchema, req.body);
     const row = db
-      .prepare('SELECT id, email, nickname, password_hash FROM users WHERE lower(email) = ?')
+      .prepare(
+        'SELECT id, email, nickname, status, password_hash FROM users WHERE lower(email) = ?',
+      )
       .get(email) as (UserRow & { password_hash: string }) | undefined;
 
     const matched = row ? await bcrypt.compare(password, row.password_hash) : false;
     if (!row || !matched) {
       throw unauthorized('邮箱或密码错误');
+    }
+    // 密码校验通过之后才判断状态：先判状态会让攻击者拿任意邮箱去探测哪些账号存在。
+    if (row.status === 'disabled') {
+      throw forbidden('账号已被停用，请联系管理员');
     }
 
     setRefreshCookie(res, issueRefreshToken(row.id));
@@ -131,6 +140,24 @@ router.post(
       throw unauthorized('登录已过期');
     }
 
+    // 账号状态要在 token 状态之前判断。
+    // 停用时会顺手作废全部会话，如果先看 token，被停用的用户拿自己的 token 来刷新
+    // 会落进下面的「重放」分支，收到一句「登录状态异常」——既误导用户，
+    // 也把一次正常的封禁记成了疑似凭证泄露。
+    // 能走到这里说明 refresh token 的签名有效，因此不存在借此探测账号状态的问题。
+    const user = findUserById(payload.sub);
+    if (!user) {
+      revokeAllSessions(payload.sub);
+      clearRefreshCookie(res);
+      throw unauthorized('用户不存在');
+    }
+    if (user.status === 'disabled') {
+      // 停用时已经作废过一次，这里再兜一次，防止停用后又签发出新会话。
+      revokeAllSessions(payload.sub, 'logout');
+      clearRefreshCookie(res);
+      throw forbidden('账号已被停用，请联系管理员');
+    }
+
     const lookup = lookupRefreshToken(refreshToken, payload.sub);
     if (lookup.status === 'reused') {
       // 已登出、已超出宽限期或库里查不到的 token 被再次使用，按凭证泄露处理。
@@ -146,13 +173,6 @@ router.post(
     if (lookup.status === 'expired') {
       clearRefreshCookie(res);
       throw unauthorized('登录已过期');
-    }
-
-    const user = findUserById(payload.sub);
-    if (!user) {
-      revokeAllSessions(payload.sub);
-      clearRefreshCookie(res);
-      throw unauthorized('用户不存在');
     }
 
     // grace 表示这是多标签页并发刷新的落败方：cookie 已被赢家更新，这里只补发 access token。

@@ -7,6 +7,7 @@ import { RecoilRoot } from 'recoil';
 import { ErrorBoundary, Message } from 'tilty-ui';
 
 import AuthProvider from '@/features/auth/AuthProvider';
+import PreferencesProvider from '@/features/preferences/PreferencesProvider';
 import RoomProvider from '@/features/room/RoomProvider';
 import Router from '@/router';
 
@@ -36,11 +37,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <RecoilRoot>
           <ErrorBoundary>
             <BrowserRouter>
-              {/* 会话恢复与房间连接各自只有一个持有者，避免多个组件重复发起。 */}
+              {/* 会话恢复、偏好同步与房间连接各自只有一个持有者，避免多个组件重复发起。 */}
               <AuthProvider>
-                <RoomProvider>
-                  <Router />
-                </RoomProvider>
+                <PreferencesProvider>
+                  <RoomProvider>
+                    <Router />
+                  </RoomProvider>
+                </PreferencesProvider>
               </AuthProvider>
             </BrowserRouter>
             <ToastContainer

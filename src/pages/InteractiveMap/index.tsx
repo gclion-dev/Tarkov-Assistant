@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 
-import { useInterval, useLocalStorageState } from 'ahooks';
+import { useInterval } from 'ahooks';
 import classNames from 'classnames';
 import numbro from 'numbro';
 import { useRecoilState } from 'recoil';
@@ -10,10 +10,19 @@ import { UAParser } from 'ua-parser-js';
 
 import { loadInteractiveMaps, loadMapTasks, refreshInteractiveMaps, refreshMapTasks } from '@/data/loadMaps';
 import useAuth from '@/features/auth/hooks/useAuth';
+import usePreferences from '@/features/preferences/hooks/usePreferences';
 import RoomPanel from '@/features/room/components/RoomPanel';
 import useRoom from '@/features/room/hooks/useRoom';
 import type { PlayerLocation } from '@/features/room/types';
 import langState from '@/store/lang';
+import {
+  FS_HANDLE_KEYS,
+  loadHandle,
+  queryHandlePermission,
+  removeHandle,
+  requestHandlePermission,
+  saveHandle,
+} from '@/utils/fsHandleStore';
 import { tarkovGamePathResolve } from '@/utils/tarkov';
 
 import AppNav from '@/components/AppNav';
@@ -35,11 +44,38 @@ import { getLayer } from './utils';
 
 import './style.less';
 
+/**
+ * 日志里的 location 值 → 地图 id。
+ * 优先按 tarkov.dev 的 nameId 匹配，对不上时才查这张兜底表。
+ */
+const RAID_LOCATION_MAP_IDS: Record<string, string> = {
+  TarkovStreets: '5714dc692459777137212e12',
+  Sandbox: '653e6760052c01c1c805532f',
+  Sandbox_high: '65b8d6f5cdde2479cb2a3125',
+  bigmap: '56f40101d2720b2a4d8b45d6',
+  factory4_day: '55f2d3fd4bdc2d5f408b4567',
+  factory4_night: '59fc81d786f774390775787e',
+  Interchange: '5714dbc024597771384a510d',
+  laboratory: '5b0fc42d86f7744a585f9105',
+  Lighthouse: '5704e4dad2720bb55b8b4567',
+  RezervBase: '5704e5fad2720bc05b8b4567',
+  Shoreline: '5704e554d2720bac5b8b456e',
+  Woods: '5704e3c2d2720bac5b8b4567',
+};
+
+/** 这几张图没有可硬编码的稳定 id，按 normalizedName 在当前地图列表里找。 */
+const RAID_LOCATION_NORMALIZED_NAMES: Record<string, string> = {
+  Terminal: 'terminal',
+  terminal: 'terminal',
+  Labyrinth: 'the-labyrinth',
+  TheLabyrinth: 'the-labyrinth',
+  Icebreaker: 'icebreaker',
+  Ice_breaker: 'icebreaker',
+};
+
 const Index = () => {
   const [mapList, setMapList] = useState<InteractiveMap.Data[]>([]);
-  const [activeMapId, setActiveMapId] = useState<string>();
   const [activeMap, setActiveMap] = useState<InteractiveMap.Data>();
-  const [activeLayer, setActiveLayer] = useState<InteractiveMap.Layer>();
 
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [rulerPosition, setRulerPosition] = useState<InteractiveMap.Position2D[]>();
@@ -49,6 +85,15 @@ const Index = () => {
 
   const [directoryHandler, setDirectoryHandler] = useState<FileSystemDirectoryHandle>();
   const [tarkovGamePathHandler, setTarkovGamePathHandler] = useState<FileSystemDirectoryHandle>();
+  /**
+   * 「待授权」的句柄：IndexedDB 里还留着，但浏览器当前只给到 prompt。
+   * 这种情况只会在关闭该站点所有标签页后重开时出现（F5 刷新时权限仍然有效）。
+   * requestPermission 必须在用户手势里调用，所以只能存下来等用户点一下。
+   */
+  const [pendingDirectoryHandle, setPendingDirectoryHandle] = useState<FileSystemDirectoryHandle>();
+  const [pendingGamePathHandle, setPendingGamePathHandle] = useState<FileSystemDirectoryHandle>();
+  /** 目录恢复流程是否已结束。用于避免引导弹窗在恢复成功前先闪一下。 */
+  const [handlesRestored, setHandlesRestored] = useState(false);
   const [applicationLogsHandler, setApplicationLogsHandler] = useState<FileSystemFileHandle>();
   const [notificationsLogsHandler, setNotificationsLogsHandler] = useState<FileSystemFileHandle>();
   const applicationPathNameCache = useRef<string>();
@@ -60,50 +105,44 @@ const Index = () => {
 
   const [raidInfo, setRaidInfo] = useState<InteractiveMap.RaidLogProps>();
 
-  const [extracts, setExtracts] = useLocalStorageState<InteractiveMap.Faction[]>('im-extracts', {
-    defaultValue: ['pmc', 'scav', 'shared'],
-  });
-  const [locks, setLocks] = useLocalStorageState<string[]>('im-locks', {
-    defaultValue: ['lock'],
-  });
-  const [lootKeys, setLootKeys] = useLocalStorageState<string[]>('im-lootKeys', {
-    defaultValue: ['safe', 'jacket', 'pc-block', 'cache', 'medcase', 'plastic-suitcase'],
-  });
-  const [spawns, setSpawns] = useLocalStorageState<string[]>('im-spawns', {
-    defaultValue: ['scav', 'sniper_scav', 'boss'],
-  });
-  const [hazards, setHazards] = useLocalStorageState<string[]>('im-hazards', {
-    defaultValue: ['hazard'],
-  });
-  const [stationaryWeapons, setStationaryWeapons] = useLocalStorageState<string[]>(
-    'im-stationaryWeapons',
-    {
-      defaultValue: [],
-    },
-  );
-  const [taskKeys, setTaskKeys] = useLocalStorageState<string[]>('im-taskLayers', {
-    defaultValue: [],
-  });
-  const [lootLooseKeys, setLootLooseKeys] = useLocalStorageState<string[]>('im-lootLooseKeys', {
-    defaultValue: [],
-  });
-  const [mapInfoActive, setMapInfoActive] = useLocalStorageState<boolean>('im-mapInfoActive', {
-    defaultValue: true,
-  });
-  const [locationScale, setLocationScale] = useLocalStorageState<boolean>('im-locationScale', {
-    defaultValue: true,
-  });
+  /**
+   * 所有「刷新后应该还在」的界面选择都收在 usePreferences 里：
+   * 未登录写 localStorage，登录后同步到账号，见 features/preferences。
+   */
+  const { prefs, patch } = usePreferences();
+  const {
+    activeMapId,
+    extracts,
+    locks,
+    lootKeys,
+    spawns,
+    hazards,
+    stationaryWeapons,
+    taskKeys,
+    lootLooseKeys,
+    mapInfoActive,
+    locationScale,
+    strokeColor,
+    strokeWidth,
+    eraserWidth,
+  } = prefs;
 
+  /**
+   * 楼层由「楼层名 + 所属地图 id」还原，不直接存 Layer 对象：
+   * Layer 里的 svgPath / extents 来自远端数据，存下来会过期。
+   */
+  const activeLayer = useMemo(() => {
+    if (!activeMap?.layers?.length || !prefs.activeLayerName) {
+      return undefined;
+    }
+    if (prefs.activeLayerMapId !== activeMap.id) {
+      return undefined;
+    }
+    return getLayer(prefs.activeLayerName, activeMap.layers);
+  }, [activeMap, prefs.activeLayerName, prefs.activeLayerMapId]);
+
+  // 绘图模式是会话内的临时选择，刷新回到拖拽模式是合理的，不进偏好。
   const [strokeType, setStrokeType] = useState<InteractiveMap.StrokeType>('drag');
-  const [strokeColor, setStrokeColor] = useLocalStorageState<string>('im-strokeColor', {
-    defaultValue: '#9a8866',
-  });
-  const [strokeWidth, setStrokeWidth] = useLocalStorageState<number>('im-strokeWidth', {
-    defaultValue: 1,
-  });
-  const [eraserWidth, setEraserWidth] = useLocalStorageState<number>('im-eraserWidth', {
-    defaultValue: 5,
-  });
 
   const [quickSearchShow, setQuickSearchShow] = useState(false);
   const [mapTasks, setMapTasks] = useState(loadMapTasks);
@@ -116,7 +155,25 @@ const Index = () => {
 
   const directoryFilesCache = useRef<string[]>([]);
 
+  /**
+   * 最近一次提示过的地图 id。
+   * 用来区分「用户/日志真的切了图」和「从偏好恢复 + 远端地图数据刷新导致的重跑」，
+   * 后者不该弹「地图已切换至 X」。
+   */
+  const lastToastedMapId = useRef<string>();
+
   const { t } = useI18N(lang);
+
+  /** 切图时必须一并清掉楼层，否则楼层会串到新地图上。 */
+  const switchMap = useCallback(
+    (mapId?: string) => {
+      if (!mapId) {
+        return;
+      }
+      patch({ activeMapId: mapId, activeLayerName: undefined, activeLayerMapId: undefined });
+    },
+    [patch],
+  );
 
   const handleLocationUpdate = useCallback(
     (location: PlayerLocation) => {
@@ -187,76 +244,19 @@ const Index = () => {
     toast.info(`载入战局信息: ${log.shortId}`);
     const matched = mapList.find((map) => map.nameId === log.location);
     if (matched) {
-      setActiveMapId(matched.id);
-      setActiveLayer(undefined);
+      switchMap(matched.id);
       return;
     }
-    switch (log.location) {
-      case 'TarkovStreets':
-        setActiveMapId('5714dc692459777137212e12');
-        setActiveLayer(undefined);
-        break;
-      case 'Sandbox':
-        setActiveMapId('653e6760052c01c1c805532f');
-        setActiveLayer(undefined);
-        break;
-      case 'Sandbox_high':
-        setActiveMapId('65b8d6f5cdde2479cb2a3125');
-        setActiveLayer(undefined);
-        break;
-      case 'bigmap':
-        setActiveMapId('56f40101d2720b2a4d8b45d6');
-        setActiveLayer(undefined);
-        break;
-      case 'factory4_day':
-        setActiveMapId('55f2d3fd4bdc2d5f408b4567');
-        setActiveLayer(undefined);
-        break;
-      case 'factory4_night':
-        setActiveMapId('59fc81d786f774390775787e');
-        setActiveLayer(undefined);
-        break;
-      case 'Interchange':
-        setActiveMapId('5714dbc024597771384a510d');
-        setActiveLayer(undefined);
-        break;
-      case 'laboratory':
-        setActiveMapId('5b0fc42d86f7744a585f9105');
-        setActiveLayer(undefined);
-        break;
-      case 'Lighthouse':
-        setActiveMapId('5704e4dad2720bb55b8b4567');
-        setActiveLayer(undefined);
-        break;
-      case 'RezervBase':
-        setActiveMapId('5704e5fad2720bc05b8b4567');
-        setActiveLayer(undefined);
-        break;
-      case 'Shoreline':
-        setActiveMapId('5704e554d2720bac5b8b456e');
-        setActiveLayer(undefined);
-        break;
-      case 'Woods':
-        setActiveMapId('5704e3c2d2720bac5b8b4567');
-        setActiveLayer(undefined);
-        break;
-      case 'Terminal':
-      case 'terminal':
-        setActiveMapId(mapList.find((map) => map.normalizedName === 'terminal')?.id);
-        setActiveLayer(undefined);
-        break;
-      case 'Labyrinth':
-      case 'TheLabyrinth':
-        setActiveMapId(mapList.find((map) => map.normalizedName === 'the-labyrinth')?.id);
-        setActiveLayer(undefined);
-        break;
-      case 'Icebreaker':
-      case 'Ice_breaker':
-        setActiveMapId(mapList.find((map) => map.normalizedName === 'icebreaker')?.id);
-        setActiveLayer(undefined);
-        break;
-      default:
-        break;
+    const mappedId = RAID_LOCATION_MAP_IDS[log.location];
+    if (mappedId) {
+      switchMap(mappedId);
+      return;
+    }
+    const normalizedName = RAID_LOCATION_NORMALIZED_NAMES[log.location];
+    if (normalizedName) {
+      // 找不到就保持当前地图。改造前这里会把 activeMapId 置空，
+      // 结果被兜底逻辑带到列表第一张图上，比「不动」更让人困惑。
+      switchMap(mapList.find((map) => map.normalizedName === normalizedName)?.id);
     }
   };
 
@@ -367,78 +367,128 @@ const Index = () => {
   };
 
   const handleExtractsChange = (_extracts: InteractiveMap.Faction[]) => {
-    setExtracts(_extracts);
+    patch({ extracts: _extracts });
   };
 
   const handleLocksChange = (_locks: string[]) => {
-    setLocks(_locks);
+    patch({ locks: _locks });
   };
 
   const handleLootKeysChange = (_lootKeys: string[]) => {
-    setLootKeys(_lootKeys);
+    patch({ lootKeys: _lootKeys });
   };
 
   const handleSpawnsChange = (_spawns: string[]) => {
-    setSpawns(_spawns);
+    patch({ spawns: _spawns });
   };
 
   const handleHazardsChange = (_hazards: string[]) => {
-    setHazards(_hazards);
+    patch({ hazards: _hazards });
   };
 
   const handleStationaryWeaponsChange = (_stationaryWeapons: string[]) => {
-    setStationaryWeapons(_stationaryWeapons);
+    patch({ stationaryWeapons: _stationaryWeapons });
   };
 
   const handleTasksChange = (_tasks: string[]) => {
-    setTaskKeys(_tasks);
+    patch({ taskKeys: _tasks });
   };
 
   const handleLootLooseKeysChange = (_lootLooseKeys: string[]) => {
-    setLootLooseKeys(_lootLooseKeys);
+    patch({ lootLooseKeys: _lootLooseKeys });
   };
 
   const handleMapInfoActive = (_mapInfoActive: boolean) => {
-    setMapInfoActive(_mapInfoActive);
+    patch({ mapInfoActive: _mapInfoActive });
   };
 
+  /** 用户在选择目录的弹窗里按了取消。此时绝不能清掉已经生效的句柄。 */
+  const isAbort = (err: unknown) => (err as DOMException)?.name === 'AbortError';
+
   const handleClickEftWatcherPath = async () => {
-    if (window.showDirectoryPicker) {
-      try {
-        const handler = await window.showDirectoryPicker();
-        if (handler) {
-          setDirectoryHandler(handler);
-        }
-      } catch (err) {
-        setDirectoryHandler(undefined);
-      }
-    } else {
+    if (!window.showDirectoryPicker) {
       message.show({ content: t('eftwatcher.unsupportMsg') });
+      return;
+    }
+
+    // 有待授权的句柄时先原地要权限，用户不需要再翻一遍文件系统。
+    if (pendingDirectoryHandle) {
+      const permission = await requestHandlePermission(pendingDirectoryHandle);
+      if (permission === 'granted') {
+        setDirectoryHandler(pendingDirectoryHandle);
+        setPendingDirectoryHandle(undefined);
+        return;
+      }
+      if (permission === 'denied') {
+        setPendingDirectoryHandle(undefined);
+        await removeHandle(FS_HANDLE_KEYS.screenshotDir);
+        message.show({ content: '未获得目录访问权限，请重新选择截图目录' });
+        return;
+      }
+      // 其余情况（用户忽略了弹窗等）继续走下面的重新选择流程。
+    }
+
+    try {
+      const handler = await window.showDirectoryPicker();
+      if (handler) {
+        setDirectoryHandler(handler);
+        setPendingDirectoryHandle(undefined);
+        await saveHandle(FS_HANDLE_KEYS.screenshotDir, handler);
+      }
+    } catch (err) {
+      if (isAbort(err)) {
+        return;
+      }
+      setDirectoryHandler(undefined);
+      await removeHandle(FS_HANDLE_KEYS.screenshotDir);
     }
   };
 
   const handleClickTarkovGamePath = async () => {
-    if (window.showDirectoryPicker) {
-      try {
-        const handler = await window.showDirectoryPicker();
-        if (handler) {
-          const result = await tarkovGamePathResolve.checkPath(handler);
-          if (result) {
-            setTarkovGamePathHandler(handler);
-          } else {
-            message.show({ content: '所选文件夹不是塔科夫游戏目录，请重新选择！' });
-          }
-        }
-      } catch (err) {
-        setTarkovGamePathHandler(undefined);
-      }
-    } else {
+    if (!window.showDirectoryPicker) {
       message.show({ content: t('eftwatcher.unsupportMsg') });
+      return;
+    }
+
+    if (pendingGamePathHandle) {
+      const permission = await requestHandlePermission(pendingGamePathHandle);
+      if (permission === 'granted') {
+        setTarkovGamePathHandler(pendingGamePathHandle);
+        setPendingGamePathHandle(undefined);
+        return;
+      }
+      if (permission === 'denied') {
+        setPendingGamePathHandle(undefined);
+        await removeHandle(FS_HANDLE_KEYS.gameDir);
+        message.show({ content: '未获得目录访问权限，请重新选择游戏目录' });
+        return;
+      }
+    }
+
+    try {
+      const handler = await window.showDirectoryPicker();
+      if (handler) {
+        const result = await tarkovGamePathResolve.checkPath(handler);
+        if (result) {
+          setTarkovGamePathHandler(handler);
+          setPendingGamePathHandle(undefined);
+          await saveHandle(FS_HANDLE_KEYS.gameDir, handler);
+        } else {
+          // 选错了目录不影响之前已经生效的那个，只提示重新选。
+          message.show({ content: '所选文件夹不是塔科夫游戏目录，请重新选择！' });
+        }
+      }
+    } catch (err) {
+      if (isAbort(err)) {
+        return;
+      }
+      setTarkovGamePathHandler(undefined);
+      await removeHandle(FS_HANDLE_KEYS.gameDir);
     }
   };
 
   const handleLocationScaleChange = (_b: boolean) => {
-    setLocationScale(_b);
+    patch({ locationScale: _b });
   };
 
   const handleStrokeTypeChange = (_strokeType: InteractiveMap.StrokeType) => {
@@ -446,30 +496,29 @@ const Index = () => {
   };
 
   const handleStrokeColorChange = (_color: string) => {
-    setStrokeColor(_color);
+    patch({ strokeColor: _color });
   };
 
   const handleStrokeWidthChange = (_width: number) => {
-    setStrokeWidth(_width);
+    patch({ strokeWidth: _width });
   };
 
   const handleEraserWidthChange = (_width: number) => {
-    setEraserWidth(_width);
+    patch({ eraserWidth: _width });
   };
 
   const handleMapChange = (mapId: string) => {
-    setActiveMapId(mapId);
-    setActiveLayer(undefined);
+    switchMap(mapId);
     toast.info('正在切换地图，请稍候...');
   };
 
   const handleLayerChange = (name: string) => {
     if (!name) {
-      setActiveLayer(undefined);
+      patch({ activeLayerName: undefined, activeLayerMapId: undefined });
       return;
     }
     if (activeMap?.layers) {
-      setActiveLayer(getLayer(name, activeMap.layers));
+      patch({ activeLayerName: name, activeLayerMapId: activeMap.id });
     }
   };
 
@@ -478,16 +527,26 @@ const Index = () => {
       const data = mapList.find((item) => item.id === activeMapId);
       if (data) {
         setActiveMap(data);
-        toast.success(`地图已切换至${data.name}`);
+        // 首次从偏好恢复、以及远端地图数据刷新导致的重跑都不该提示切换。
+        if (lastToastedMapId.current && lastToastedMapId.current !== data.id) {
+          toast.success(`地图已切换至${data.name}`);
+        }
+        lastToastedMapId.current = data.id;
       }
     }
   }, [activeMapId, mapList]);
 
   useEffect(() => {
-    if (!activeMapId && mapList[0]?.id) {
-      setActiveMapId(mapList[0].id);
+    if (!mapList.length) {
+      return;
     }
-  }, [mapList, activeMapId]);
+    // 只判断「有没有值」不够：偏好里存的 id 可能已经不在当前地图列表里
+    // （地图下线、远端数据更新、跨版本），那样会卡在地图空白的死状态。
+    const exists = !!activeMapId && mapList.some((map) => map.id === activeMapId);
+    if (!exists) {
+      switchMap(mapList[0].id);
+    }
+  }, [mapList, activeMapId, switchMap]);
 
   useEffect(() => {
     setMapList(loadInteractiveMaps());
@@ -538,6 +597,58 @@ const Index = () => {
       window.removeEventListener('beforeunload', unload);
     };
   }, [simpleUIMode]);
+
+  /**
+   * 从 IndexedDB 恢复上次绑定的目录。
+   *
+   * F5 刷新时浏览器的授权仍然有效（授权在该 origin 还有标签页存在期间保持），
+   * 所以这里通常直接拿到 granted，用户无需任何操作就恢复监听。
+   * 关掉所有标签后重开会是 prompt，只能标记成待授权等用户点一下。
+   */
+  useEffect(() => {
+    if (!window.showDirectoryPicker) {
+      // 浏览器不支持时没有可恢复的东西，直接放行引导弹窗。
+      setHandlesRestored(true);
+      return;
+    }
+    let cancelled = false;
+
+    const restore = async (
+      key: (typeof FS_HANDLE_KEYS)[keyof typeof FS_HANDLE_KEYS],
+      onGranted: (handle: FileSystemDirectoryHandle) => void,
+      onPending: (handle: FileSystemDirectoryHandle) => void,
+    ) => {
+      const handle = await loadHandle(key);
+      if (!handle || cancelled) {
+        return;
+      }
+      const permission = await queryHandlePermission(handle);
+      if (cancelled) {
+        return;
+      }
+      if (permission === 'granted') {
+        onGranted(handle);
+      } else if (permission === 'prompt') {
+        onPending(handle);
+      } else {
+        // denied / unsupported：句柄已经没用了，清掉以免一直提示恢复。
+        await removeHandle(key);
+      }
+    };
+
+    Promise.all([
+      restore(FS_HANDLE_KEYS.screenshotDir, setDirectoryHandler, setPendingDirectoryHandle),
+      restore(FS_HANDLE_KEYS.gameDir, setTarkovGamePathHandler, setPendingGamePathHandle),
+    ]).finally(() => {
+      if (!cancelled) {
+        setHandlesRestored(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     resolveDirectories(true);
@@ -641,6 +752,10 @@ const Index = () => {
                     raidInfo={raidInfo}
                     directoryHandler={directoryHandler}
                     tarkovGamePathHandler={tarkovGamePathHandler}
+                    directoryPending={!!pendingDirectoryHandle}
+                    tarkovGamePathPending={!!pendingGamePathHandle}
+                    onClickEftWatcherPath={handleClickEftWatcherPath}
+                    onClickTarkovGamePath={handleClickTarkovGamePath}
                     show={mapInfoActive}
                   />
                 </div>
@@ -666,6 +781,8 @@ const Index = () => {
                   eraserWidth={eraserWidth}
                   directoryHandler={directoryHandler}
                   tarkovGamePathHandler={tarkovGamePathHandler}
+                  directoryPending={!!pendingDirectoryHandle}
+                  tarkovGamePathPending={!!pendingGamePathHandle}
                   locationScale={locationScale}
                   resolution={resolution}
                   isMobile={isMobile}
@@ -719,6 +836,9 @@ const Index = () => {
         <EFTWatcher
           directoryHandler={directoryHandler}
           tarkovGamePathHandler={tarkovGamePathHandler}
+          directoryPending={!!pendingDirectoryHandle}
+          tarkovGamePathPending={!!pendingGamePathHandle}
+          ready={handlesRestored}
           onClickEftWatcherPath={handleClickEftWatcherPath}
           onClickTarkovGamePath={handleClickTarkovGamePath}
         />

@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="src/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0" />
+    <!--
+      安装为应用后，浏览器会长期保留截图/游戏目录的授权，不必每次重开都重新授权。
+      不安装也能正常使用，只是刷新以外的场景（关掉全部标签后重开）需要点一次恢复。
+      不注册 service worker：Chrome 桌面版 112 起从菜单安装已不再要求它，
+      省掉离线缓存带来的版本更新问题。
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1c1c1c" />
+    <link rel="apple-touch-icon" href="/images/pwa-icon-192.png" />
     <title>互动地图</title>
   </head>
   <body>
