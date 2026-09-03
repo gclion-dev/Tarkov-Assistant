@@ -5,11 +5,14 @@ import { verifyAccessToken } from '../auth/jwt.js';
 import { isUserActive } from '../auth/users.js';
 import config from '../config.js';
 import {
+  addMark,
+  clearMarks,
   createRoom,
   findRoomByUserId,
   joinRoom,
   leaveRoom,
   leaveSocket,
+  removeMark,
   roomToSync,
   updateLocation,
 } from './manager.js';
@@ -45,6 +48,18 @@ const locationSchema = z.object({
   z: z.number().finite(),
   quaternion: z.array(z.number().finite()).length(4).optional(),
 });
+
+// 与位置同理：标记会被广播给同房间所有人并直接进入 leaflet 渲染，必须服务端校验。
+const markSchema = z.object({
+  id: z.string().min(1).max(64),
+  mapId: z.string().min(1).max(64),
+  x: z.number().finite(),
+  z: z.number().finite(),
+});
+
+const markIdSchema = z.object({ id: z.string().min(1).max(64) });
+
+const clearMarksSchema = z.object({ mapId: z.string().min(1).max(64).optional() });
 
 const QUOTA_WINDOW_MS = 10 * 1000;
 
@@ -261,6 +276,80 @@ export const setupRoomSocket = (io: Server) => {
             userId: data.userId,
             location: result.member.location,
           });
+        }
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    /**
+     * 标记类事件一律广播完整房间状态，不做增量。
+     * 标记是低频操作（只有位置上报是高频的），走全量能顺带修好任何漏发导致的残留标记，
+     * 也让新加入的成员直接从 room:state 里拿到已有标记。
+     */
+    socket.on(
+      'mark:add',
+      handle<null>(socket, (payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const parsed = markSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack?.({ ok: false, error: '标记数据不合法' });
+          return;
+        }
+        const result = addMark(roomId, data.userId, parsed.data);
+        if (!result) {
+          ack?.({ ok: false, error: '房间不存在' });
+          return;
+        }
+        if ('error' in result) {
+          ack?.({ ok: false, error: result.error });
+          return;
+        }
+        emitState(roomId, roomToSync(result.room));
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    socket.on(
+      'mark:remove',
+      handle<null>(socket, (payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const parsed = markIdSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack?.({ ok: false, error: '标记数据不合法' });
+          return;
+        }
+        const result = removeMark(roomId, data.userId, parsed.data.id);
+        if (result) {
+          emitState(roomId, roomToSync(result.room));
+        }
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    socket.on(
+      'mark:clear',
+      handle<null>(socket, (payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const parsed = clearMarksSchema.safeParse(payload ?? {});
+        if (!parsed.success) {
+          ack?.({ ok: false, error: '标记数据不合法' });
+          return;
+        }
+        const result = clearMarks(roomId, data.userId, parsed.data.mapId);
+        if (result) {
+          emitState(roomId, roomToSync(result.room));
         }
         ack?.({ ok: true, data: null });
       }),

@@ -6,6 +6,7 @@ import { useRecoilState } from 'recoil';
 import useAuth from '@/features/auth/hooks/useAuth';
 import { refreshAccessToken } from '@/features/auth/services/http';
 import {
+  addRoomMark,
   connectRoomSocket,
   disconnectRoomSocket,
   joinRoom,
@@ -13,6 +14,7 @@ import {
   reconnectRoomSocket,
 } from '@/features/room/services/roomSocket';
 import type { LocationUpdatedPayload, RoomState } from '@/features/room/types';
+import mapMarkState from '@/store/mapMarkState';
 import roomState, { initialRoomState } from '@/store/roomState';
 
 /**
@@ -27,6 +29,11 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
   // tokenStore 现取最新值，没必要因为换 token 就重建监听。
   const { isAuthenticated } = useAuth();
   const [state, setState] = useRecoilState(roomState);
+  const [ownMarks] = useRecoilState(mapMarkState);
+
+  // 标记列表在事件回调外只读一次即可，用 ref 避免把它塞进重连 effect 的依赖里。
+  const ownMarksRef = useRef(ownMarks);
+  ownMarksRef.current = ownMarks;
 
   // 事件回调在 React 渲染周期之外执行，用 ref 读取最新的期望房间号。
   const desiredRoomIdRef = useRef(state.desiredRoomId);
@@ -127,6 +134,30 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, [isAuthenticated, setState]);
+
+  /**
+   * 进入房间（含断线重连后重新加入）时把已有的本地标记推上去。
+   *
+   * 标记可以在未进房间时就打好，服务端也不持久化房间数据，
+   * 不补推的话这些标记队友永远看不到。服务端按 id 去重，重复推是幂等的。
+   */
+  const syncedRoomIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const roomId = state.room?.id ?? null;
+    if (!roomId || !state.connected) {
+      syncedRoomIdRef.current = null;
+      return;
+    }
+    if (syncedRoomIdRef.current === roomId) {
+      return;
+    }
+    syncedRoomIdRef.current = roomId;
+    ownMarksRef.current.forEach((mark) => {
+      addRoomMark({ id: mark.id, mapId: mark.mapId, x: mark.x, z: mark.z }).catch(
+        () => undefined,
+      );
+    });
+  }, [state.room?.id, state.connected]);
 
   return <>{children}</>;
 };

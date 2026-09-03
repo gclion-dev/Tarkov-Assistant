@@ -12,6 +12,7 @@ import { loadInteractiveMaps, loadMapTasks, refreshInteractiveMaps, refreshMapTa
 import useAuth from '@/features/auth/hooks/useAuth';
 import usePreferences from '@/features/preferences/hooks/usePreferences';
 import RoomPanel from '@/features/room/components/RoomPanel';
+import useMapMarks from '@/features/room/hooks/useMapMarks';
 import useRoom from '@/features/room/hooks/useRoom';
 import type { PlayerLocation } from '@/features/room/types';
 import langState from '@/store/lang';
@@ -152,6 +153,7 @@ const Index = () => {
 
   const { user } = useAuth();
   const { room, reportLocation } = useRoom();
+  const { ownMarks, removeMark } = useMapMarks();
   const [selfLocation, setSelfLocation] = useState<PlayerLocation>();
 
   const directoryFilesCache = useRef<string[]>([]);
@@ -714,7 +716,9 @@ const Index = () => {
             selfUserId={user?.id}
             selfLocation={selfLocation}
             roomMembers={room?.members}
+            marks={ownMarks}
             onLocationUpdate={handleLocationUpdate}
+            onMarkRemove={removeMark}
             markerExtracts={extracts || []}
             markerLocks={locks || []}
             markerLootKeys={lootKeys || []}

@@ -1,7 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 
 import { getAccessToken } from '@/features/auth/services/tokenStore';
-import type { PlayerLocation, RoomState } from '@/features/room/types';
+import type { MapMark, PlayerLocation, RoomState } from '@/features/room/types';
 
 type AckResponse<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -112,6 +112,33 @@ export const updateRoomLocation = (location: PlayerLocation) => {
   if (instance.connected) {
     instance.emit('location:update', location);
   }
+};
+
+/**
+ * 标记同步。
+ *
+ * 都用带 ack 的形式：标记是低频操作，且服务端会因为超出上限而拒绝，
+ * 调用方需要知道结果才能把本地那一份回滚掉。未连接时直接当作纯本地操作，不报错。
+ */
+export const addRoomMark = (mark: Omit<MapMark, 'createdAt'>) => {
+  if (!getSocket().connected) {
+    return Promise.resolve();
+  }
+  return emitWithAck<null>('mark:add', mark).then(() => undefined);
+};
+
+export const removeRoomMark = (id: string) => {
+  if (!getSocket().connected) {
+    return Promise.resolve();
+  }
+  return emitWithAck<null>('mark:remove', { id }).then(() => undefined);
+};
+
+export const clearRoomMarks = (mapId?: string) => {
+  if (!getSocket().connected) {
+    return Promise.resolve();
+  }
+  return emitWithAck<null>('mark:clear', { mapId }).then(() => undefined);
 };
 
 export const onRoomEvent = <T>(event: string, handler: (payload: T) => void) => {

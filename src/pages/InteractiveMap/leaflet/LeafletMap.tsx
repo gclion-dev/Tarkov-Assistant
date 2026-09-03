@@ -4,7 +4,12 @@ import { useInterval } from 'ahooks';
 import L from 'leaflet';
 
 import type { MapTask } from '@/data/transformTasks';
-import type { PlayerLocation, RoomMember } from '@/features/room/types';
+import {
+  DEFAULT_SELF_COLOR,
+  type MapMark,
+  type PlayerLocation,
+  type RoomMember,
+} from '@/features/room/types';
 import { escapeHtml } from '@/utils/html';
 import { parseLocationFromFilename, quaternionToEulerAngles } from '@/utils/tarkov';
 
@@ -48,15 +53,27 @@ interface LeafletMapProps {
   /** 自己的最新位置。不在房间里时也会渲染，保证单人使用的行为不变。 */
   selfLocation?: PlayerLocation;
   roomMembers?: RoomMember[];
+  /** 自己打的坐标标记（含其他地图的，渲染时按 mapId 过滤）。 */
+  marks?: MapMark[];
   onCursorPositionChange?: (cursorPosition: InteractiveMap.Position2D) => void;
   onRulerPositionChange?: (rulerPosition: InteractiveMap.Position2D[] | undefined) => void;
   onLocationUpdate?: (location: PlayerLocation) => void;
+  /** 点自己的标记即删除。队友的标记不可交互，只能由本人删除。 */
+  onMarkRemove?: (id: string) => void;
 }
 
 interface PlayerMarkerEntry {
   label: string;
   color: string;
   location: PlayerLocation;
+  isSelf: boolean;
+}
+
+interface MarkEntry {
+  mark: MapMark;
+  color: string;
+  /** 归属者昵称，用于 hover 提示。自己的标记为 undefined。 */
+  owner?: string;
   isSelf: boolean;
 }
 
@@ -90,9 +107,11 @@ const Index = (props: LeafletMapProps) => {
     selfUserId,
     selfLocation,
     roomMembers,
+    marks,
     onCursorPositionChange,
     onRulerPositionChange,
     onLocationUpdate,
+    onMarkRemove,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,6 +138,9 @@ const Index = (props: LeafletMapProps) => {
   const roomMembersRef = useRef(roomMembers);
   const selfUserIdRef = useRef(selfUserId);
   const selfLocationRef = useRef(selfLocation);
+  const markLayerRef = useRef<L.LayerGroup>();
+  const marksRef = useRef(marks);
+  const onMarkRemoveRef = useRef(onMarkRemove);
 
   onCursorRef.current = onCursorPositionChange;
   onRulerRef.current = onRulerPositionChange;
@@ -132,8 +154,23 @@ const Index = (props: LeafletMapProps) => {
   roomMembersRef.current = roomMembers;
   selfUserIdRef.current = selfUserId;
   selfLocationRef.current = selfLocation;
+  marksRef.current = marks;
+  onMarkRemoveRef.current = onMarkRemove;
 
-  const SELF_COLOR = '#00ff88';
+  /**
+   * 自己的颜色。
+   *
+   * 在房间里时用服务端分配给自己的那一份，而不是固定的默认绿色 —— 否则房间里
+   * 每个人看自己都是绿色，「不同玩家不同颜色」就只对队友生效。
+   * 箭头和坐标标记共用这个颜色，靠形状区分二者。
+   */
+  const getSelfColor = () => {
+    const selfId = selfUserIdRef.current;
+    const own = selfId
+      ? (roomMembersRef.current || []).find((member) => member.userId === selfId)
+      : undefined;
+    return own?.color || DEFAULT_SELF_COLOR;
+  };
 
   /** 把四元数换算成地图上的箭头角度（需要叠加地图自身的坐标系旋转）。 */
   const getMarkerRotation = (quaternion?: number[]) => {
@@ -166,7 +203,7 @@ const Index = (props: LeafletMapProps) => {
     const entries: PlayerMarkerEntry[] = [];
 
     if (own && own.mapId === currentMapId) {
-      entries.push({ label: '你的位置', color: SELF_COLOR, location: own, isSelf: true });
+      entries.push({ label: '你的位置', color: getSelfColor(), location: own, isSelf: true });
     }
     (roomMembersRef.current || []).forEach((member) => {
       // 自己的标记始终以本地位置为准（更实时），不使用服务端回传的那一份。
@@ -200,6 +237,68 @@ const Index = (props: LeafletMapProps) => {
         }),
         zIndexOffset: isSelf ? 1000 : 900,
       }).addTo(layer);
+    });
+  };
+
+  /**
+   * 坐标标记的唯一渲染入口。
+   *
+   * 形状是菱形 + 中心点，和玩家箭头刻意不同；颜色则与同一个人的箭头完全一致，
+   * 这样房间里既能看出「哪个标记是谁打的」，也不会把标记误认成某人的位置。
+   */
+  const renderMarks = () => {
+    const layer = markLayerRef.current;
+    if (!layer) {
+      return;
+    }
+    layer.clearLayers();
+
+    const currentMapId = mapDataRef.current.id;
+    const selfId = selfUserIdRef.current;
+    const entries: MarkEntry[] = [];
+
+    const selfColor = getSelfColor();
+    (marksRef.current || []).forEach((mark) => {
+      if (mark.mapId !== currentMapId) {
+        return;
+      }
+      entries.push({ mark, color: selfColor, isSelf: true });
+    });
+    (roomMembersRef.current || []).forEach((member) => {
+      // 自己的标记只用本地那一份：服务端回传的会比本地慢一个来回。
+      if (selfId && member.userId === selfId) {
+        return;
+      }
+      (member.marks || []).forEach((mark) => {
+        if (mark.mapId !== currentMapId) {
+          return;
+        }
+        entries.push({ mark, color: member.color, owner: member.nickname, isSelf: false });
+      });
+    });
+
+    entries.forEach(({ mark, color, owner, isSelf }) => {
+      // 昵称是其他玩家填写的不可信内容，拼进 innerHTML / 属性前必须转义。
+      const title = escapeHtml(isSelf ? '点击删除标记' : `${owner || ''} 的标记`);
+      const marker = L.marker(pos(mark), {
+        icon: L.divIcon({
+          className: 'im-leaflet-mark',
+          html:
+            `<div class="im-leaflet-mark-shape" title="${title}" style="border-color:${color}">` +
+            `<i style="background-color:${color}"></i>` +
+            '</div>',
+          iconSize: [18, 18],
+          // 标记指向一个精确坐标，锚点取正中而不是底边。
+          iconAnchor: [9, 9],
+        }),
+        // 只有自己的标记可点，避免误删别人的（服务端也只允许删自己的）。
+        interactive: isSelf,
+        zIndexOffset: 800,
+      }).addTo(layer);
+      if (isSelf) {
+        // leaflet 会为 interactive 的 marker 自行阻止事件冒泡到地图，无需额外处理。
+        marker.on('click', () => onMarkRemoveRef.current?.(mark.id));
+      }
     });
   };
 
@@ -348,6 +447,8 @@ const Index = (props: LeafletMapProps) => {
     }
 
     drawPaneRef.current = L.layerGroup().addTo(map);
+    // 标记层在玩家层之下：位置箭头永远压在标记上面。
+    markLayerRef.current = L.layerGroup().addTo(map);
     playerLayerRef.current = L.layerGroup().addTo(map);
 
     if (bounds) {
@@ -371,7 +472,14 @@ const Index = (props: LeafletMapProps) => {
     map.on('mousedown', (event: L.LeafletMouseEvent) => {
       const original = event.originalEvent;
       if (original.button === 2) {
-        showContextMenu({ x: original.clientX, y: original.clientY });
+        // 右键菜单需要「点在哪」的游戏坐标才能标记。latlng 的 lng/lat 就是游戏的 x/z
+        // （见 crs.ts 的 pos()），高度拿不到，所以标记只有平面坐标。
+        showContextMenu({
+          x: original.clientX,
+          y: original.clientY,
+          mapId: mapDataRef.current.id,
+          position: { x: event.latlng.lng, z: event.latlng.lat },
+        });
         return;
       }
       if (original.button !== 0) {
@@ -485,6 +593,11 @@ const Index = (props: LeafletMapProps) => {
   useEffect(() => {
     renderPlayerMarkers();
   }, [roomMembers, selfLocation, mapData.id]);
+
+  // roomMembers 既提供队友的标记，也决定自己的颜色，因此两者都要触发重渲染。
+  useEffect(() => {
+    renderMarks();
+  }, [marks, roomMembers, selfUserId, mapData.id]);
 
   useEffect(() => {
     const map = mapRef.current;

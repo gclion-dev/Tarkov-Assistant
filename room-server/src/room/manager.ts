@@ -11,6 +11,25 @@ export interface PlayerLocation {
   updatedAt: number;
 }
 
+/**
+ * 玩家手动标记的一个地图坐标。
+ *
+ * 只有平面的 x / z：标记来自鼠标右键，拿不到高度，所以不参与楼层过滤。
+ * id 由客户端生成并原样保留 —— 标记在未进房间时也能用，
+ * 让两边共用同一个 id 才能用同一套删除逻辑处理本地标记和房间标记。
+ * id 只在「同一个成员的标记列表」内使用，伪造它最多只能影响自己的标记。
+ */
+export interface MapMark {
+  id: string;
+  mapId: string;
+  x: number;
+  z: number;
+  createdAt: number;
+}
+
+/** 每个成员的标记上限。标记常驻内存并随房间状态广播，必须有界。 */
+export const MAX_MARKS_PER_MEMBER = 20;
+
 export interface RoomMember {
   userId: string;
   nickname: string;
@@ -18,6 +37,7 @@ export interface RoomMember {
   /** 同一个账号可能开多个标签页，成员在最后一个连接断开后才算离开房间。 */
   sockets: Set<string>;
   location?: PlayerLocation;
+  marks: MapMark[];
 }
 
 export interface Room {
@@ -33,6 +53,7 @@ export interface SyncMember {
   nickname: string;
   color: string;
   location?: PlayerLocation;
+  marks: MapMark[];
 }
 
 // 去掉了容易混淆的 0/O/1/I。
@@ -78,6 +99,7 @@ export const roomToSync = (room: Room) => ({
     nickname: member.nickname,
     color: member.color,
     location: member.location,
+    marks: member.marks,
   })),
 });
 
@@ -86,6 +108,7 @@ export const memberToSync = (member: RoomMember): SyncMember => ({
   nickname: member.nickname,
   color: member.color,
   location: member.location,
+  marks: member.marks,
 });
 
 export const findRoomByUserId = (userId: string) => {
@@ -116,6 +139,7 @@ export const createRoom = (userId: string, nickname: string, socketId: string): 
     nickname,
     color: pickColor(room, userId),
     sockets: new Set([socketId]),
+    marks: [],
   });
   return room;
 };
@@ -146,6 +170,7 @@ export const joinRoom = (
     nickname,
     color: pickColor(room, userId),
     sockets: new Set([socketId]),
+    marks: [],
   };
   room.members.set(userId, member);
   return { room, member, isNewMember: true };
@@ -200,6 +225,64 @@ export const updateLocation = (roomId: string, userId: string, location: PlayerL
     return null;
   }
   member.location = location;
+  room.lastActivityAt = Date.now();
+  return { room, member };
+};
+
+/**
+ * 新增一个坐标标记。
+ *
+ * 同 id 视为重复提交（客户端重发 / 多标签页），直接幂等返回而不是追加第二份。
+ */
+export const addMark = (
+  roomId: string,
+  userId: string,
+  mark: Omit<MapMark, 'createdAt'>,
+): { room: Room; member: RoomMember } | { error: string } | null => {
+  const room = getRoom(roomId);
+  const member = room?.members.get(userId);
+  if (!room || !member) {
+    return null;
+  }
+  if (member.marks.some((item) => item.id === mark.id)) {
+    return { room, member };
+  }
+  if (member.marks.length >= MAX_MARKS_PER_MEMBER) {
+    return { error: `每人最多只能添加 ${MAX_MARKS_PER_MEMBER} 个标记` };
+  }
+  member.marks.push({ ...mark, createdAt: Date.now() });
+  room.lastActivityAt = Date.now();
+  return { room, member };
+};
+
+/** 删除自己的一个标记。只能删自己的：markId 是在 member.marks 内查找的。 */
+export const removeMark = (roomId: string, userId: string, markId: string) => {
+  const room = getRoom(roomId);
+  const member = room?.members.get(userId);
+  if (!room || !member) {
+    return null;
+  }
+  const next = member.marks.filter((item) => item.id !== markId);
+  if (next.length === member.marks.length) {
+    return null;
+  }
+  member.marks = next;
+  room.lastActivityAt = Date.now();
+  return { room, member };
+};
+
+/** 清空自己的标记。传 mapId 时只清该地图的，避免误删其他地图上的标记。 */
+export const clearMarks = (roomId: string, userId: string, mapId?: string) => {
+  const room = getRoom(roomId);
+  const member = room?.members.get(userId);
+  if (!room || !member) {
+    return null;
+  }
+  const next = mapId ? member.marks.filter((item) => item.mapId !== mapId) : [];
+  if (next.length === member.marks.length) {
+    return null;
+  }
+  member.marks = next;
   room.lastActivityAt = Date.now();
   return { room, member };
 };

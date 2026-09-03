@@ -100,6 +100,42 @@
   }
 }
 
+// 坐标标记：菱形描边 + 中心点。
+// 形状刻意区别于玩家位置的实心三角箭头，颜色则与同一个人的箭头一致，
+// 所以颜色全部由内联 style 覆盖，这里只定形状。
+.im-leaflet-mark {
+  background: transparent;
+  border: none;
+  &-shape {
+    box-sizing: border-box;
+    width: 14px;
+    height: 14px;
+    margin: 2px;
+    border: 2px solid #ffffff;
+    border-radius: 2px;
+    background: #1c1c1c99;
+    transform: rotate(45deg);
+    filter: drop-shadow(0 0 2px #000);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    i {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #ffffff;
+    }
+  }
+  // 只有自己的标记是可交互的（interactive: true），给一点「可点击删除」的反馈。
+  &.leaflet-interactive {
+    cursor: pointer;
+    &:hover .im-leaflet-mark-shape {
+      transform: rotate(45deg) scale(1.25);
+    }
+  }
+}
+
 .im-leaflet-loot img,
 .im-leaflet-quest img {
   background: #111111cc;
