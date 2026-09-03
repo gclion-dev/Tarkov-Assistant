@@ -15,6 +15,8 @@ import RoomPanel from '@/features/room/components/RoomPanel';
 import useMapMarks from '@/features/room/hooks/useMapMarks';
 import useRoom from '@/features/room/hooks/useRoom';
 import type { PlayerLocation } from '@/features/room/types';
+import type { GeneratedRoutePlan } from '@/features/tasks/services/routePlanApi';
+import { clearRoutePlan, readRoutePlan } from '@/features/tasks/services/routePlanStore';
 import langState from '@/store/lang';
 import {
   FS_HANDLE_KEYS,
@@ -38,6 +40,7 @@ import MapInfo from './components/UI/MapInfo';
 import MapSelect from './components/UI/MapSelect';
 import QuickSearch from './components/UI/QuickSearch';
 import QuickTools from './components/UI/QuickTools';
+import RoutePlanPanel from './components/UI/RoutePlanPanel';
 import RulerPosition from './components/UI/RulerPosition';
 import Tooltip from './components/UI/Tooltip';
 import Warning from './components/UI/Warning';
@@ -155,6 +158,8 @@ const Index = () => {
   const { room, reportLocation } = useRoom();
   const { ownMarks, removeMark } = useMapMarks();
   const [selfLocation, setSelfLocation] = useState<PlayerLocation>();
+  const [routePlan, setRoutePlan] = useState<GeneratedRoutePlan | null>(null);
+  const [routePlanId, setRoutePlanId] = useState('');
 
   const directoryFilesCache = useRef<string[]>([]);
 
@@ -526,6 +531,32 @@ const Index = () => {
   };
 
   useEffect(() => {
+    const planId = new URLSearchParams(window.location.search).get('plan');
+    if (!planId) {
+      return;
+    }
+    const plan = readRoutePlan(planId);
+    if (!plan) {
+      toast.error(t('tasks.planMissing'));
+      return;
+    }
+    setRoutePlan(plan);
+    setRoutePlanId(planId);
+    switchMap(plan.mapId);
+  }, [switchMap, t]);
+
+  const handleCloseRoutePlan = () => {
+    if (routePlanId) {
+      clearRoutePlan(routePlanId);
+    }
+    setRoutePlan(null);
+    setRoutePlanId('');
+    if (window.location.search.includes('plan=')) {
+      window.history.replaceState({}, '', '/interactive');
+    }
+  };
+
+  useEffect(() => {
     if (activeMapId) {
       const data = mapList.find((item) => item.id === activeMapId);
       if (data) {
@@ -543,13 +574,17 @@ const Index = () => {
     if (!mapList.length) {
       return;
     }
+    // 从任务页带过来的方案会自己切图；这里不要用默认第一张图把它盖掉。
+    if (routePlan) {
+      return;
+    }
     // 只判断「有没有值」不够：偏好里存的 id 可能已经不在当前地图列表里
     // （地图下线、远端数据更新、跨版本），那样会卡在地图空白的死状态。
     const exists = !!activeMapId && mapList.some((map) => map.id === activeMapId);
     if (!exists) {
       switchMap(mapList[0].id);
     }
-  }, [mapList, activeMapId, switchMap]);
+  }, [mapList, activeMapId, switchMap, routePlan]);
 
   useEffect(() => {
     setMapList(loadInteractiveMaps());
@@ -728,6 +763,7 @@ const Index = () => {
             markerStationaryWeapons={stationaryWeapons || []}
             markerTasks={taskKeys || []}
             tasks={mapTasks}
+            routePlan={routePlan}
             locationScale={locationScale}
             strokeType={strokeType}
             strokeColor={strokeColor || '#9a8866'}
@@ -736,6 +772,9 @@ const Index = () => {
             onCursorPositionChange={handleCursorPositionChange}
             onRulerPositionChange={handleRulerPositionChange}
           />
+          {routePlan && (
+            <RoutePlanPanel lang={lang} plan={routePlan} onClose={handleCloseRoutePlan} />
+          )}
           <div className="im-header">
             <div className="im-header-left">
               <div className="im-header-left-1">

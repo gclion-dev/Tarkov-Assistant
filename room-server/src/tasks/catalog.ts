@@ -26,6 +26,15 @@ const catalogIds = new Set(catalog.map((task) => task.id));
 
 export const getTaskCatalog = () => catalog;
 
+export const getTasksByIds = (ids: string[]) => {
+  const wanted = new Set(ids);
+  return catalog.filter((task) => wanted.has(task.id));
+};
+
+const mapNames = new Set(catalog.flatMap((task) => task.maps));
+
+export const isKnownMapName = (name: string) => mapNames.has(name);
+
 /** 模型可能凭空编 id，返回结果必须过这一层白名单。 */
 export const isKnownTaskId = (id: string) => catalogIds.has(id);
 

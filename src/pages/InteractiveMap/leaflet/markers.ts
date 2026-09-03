@@ -412,6 +412,61 @@ export const buildTasks = (
   return group;
 };
 
+export const buildRoutePlan = (
+  map: L.Map,
+  nodes: Array<{
+    taskName: string;
+    description: string;
+    action: string;
+    bring: string[];
+    x: number;
+    y: number;
+    z: number;
+  }>,
+  heightRange: number[],
+  activeLayer?: InteractiveMap.Layer,
+) => {
+  const group = L.layerGroup();
+  if (!nodes.length) {
+    return group;
+  }
+  const latlngs = nodes.map((node) => pos({ x: node.x, z: node.z }));
+  L.polyline(latlngs, {
+    color: '#55a630',
+    weight: 3,
+    dashArray: '10 8',
+    opacity: 0.9,
+    interactive: false,
+  }).addTo(group);
+  nodes.forEach((node, index) => {
+    const extras = [node.action, ...(node.bring || [])].filter(Boolean).join(' · ');
+    const icon = L.divIcon({
+      className: 'im-leaflet-route-node',
+      html:
+        `<div class="im-leaflet-route-node-badge">${index + 1}</div>` +
+        `<span>${escapeHtml(node.taskName)}</span>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 28],
+    });
+    const marker = placeMarker(
+      group,
+      pos({ x: node.x, z: node.z }),
+      icon,
+      node.y,
+      isOnLevel(node.y, heightRange, activeLayer),
+      { zIndexOffset: 900 },
+    );
+    bindTooltip(
+      map,
+      marker,
+      `<div class="im-tooltip-title">${index + 1}. ${escapeHtml(node.taskName)}</div>` +
+        (extras ? `<div>${escapeHtml(extras)}</div>` : '') +
+        `<div>${escapeHtml(node.description || '')}</div>`,
+    );
+  });
+  return group;
+};
+
 export const buildLooseLoot = (
   map: L.Map,
   lootLoose: InteractiveMap.LootLoose[],

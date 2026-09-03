@@ -91,6 +91,22 @@ export default {
     imageSearchReadError: '图片处理失败，请换一张试试',
     imageSearchRemove: '移除图片',
     imageSearchQuota: '今日按图搜索剩余 {remaining} / {limit} 次',
+    generatePlan: '生成方案',
+    planPickMap: '选择要规划的地图',
+    planMapCount: '{n} 个任务',
+    planNeedTasks: '请先把任务加到当前任务',
+    planNoMap: '当前任务没有带地图的目标，无法生成跑图方案',
+    planLoading: '正在生成路线方案…',
+    planFailed: '生成方案失败，请稍后重试',
+    planPopupBlocked: '浏览器拦截了新标签页，请允许弹窗后重试',
+    planMissing: '没有找到路线方案，请回到任务页重新生成',
+    planTitle: '执行方案',
+    planBring: '需要携带',
+    planWeapons: '武器 / 口径',
+    planNotes: '文件与补充',
+    planStops: '路线节点',
+    planClose: '关闭方案',
+    planEmptyRoute: '这些任务没有可标定的地点，装备建议见上方清单',
   },
 
   // 联系信息
@@ -150,7 +166,7 @@ export default {
   // 登录
   login: {
     title: '欢迎回来',
-    text: '协作房间需要登录后使用，其余功能无需登录。',
+    text: '协作房间和 AI 功能需要登录后使用，其余功能无需登录。',
     registerTitle: '创建账户',
     registerText: '注册后即可创建协作房间，和队友互相看到彼此的位置。',
     textClient: '请使用客户端提供的账户登录功能。',

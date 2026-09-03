@@ -175,6 +175,7 @@
     background-color: #181818;
     &-head {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 8px;
       margin-bottom: 12px;
@@ -188,6 +189,20 @@
       flex: 1;
       color: #666666;
       font-size: 12px;
+    }
+    &-plan {
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid #288828;
+      border-radius: 4px;
+      color: #ffffff;
+      background-color: #288828;
+      font-size: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+      &:hover {
+        background-color: #2f9d2f;
+      }
     }
     &-clear {
       padding: 2px 8px;

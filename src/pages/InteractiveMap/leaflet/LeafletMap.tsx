@@ -10,6 +10,7 @@ import {
   type PlayerLocation,
   type RoomMember,
 } from '@/features/room/types';
+import type { GeneratedRoutePlan } from '@/features/tasks/services/routePlanApi';
 import { escapeHtml } from '@/utils/html';
 import { parseLocationFromFilename, quaternionToEulerAngles } from '@/utils/tarkov';
 
@@ -23,6 +24,7 @@ import {
   buildLocks,
   buildLooseLoot,
   buildLoot,
+  buildRoutePlan,
   buildSpawns,
   buildTasks,
   buildWeapons,
@@ -44,6 +46,7 @@ interface LeafletMapProps {
   markerStationaryWeapons: string[];
   markerTasks: string[];
   tasks: MapTask[];
+  routePlan?: GeneratedRoutePlan | null;
   locationScale?: boolean;
   strokeType: InteractiveMap.StrokeType;
   strokeColor: string;
@@ -99,6 +102,7 @@ const Index = (props: LeafletMapProps) => {
     markerStationaryWeapons,
     markerTasks,
     tasks,
+    routePlan,
     locationScale,
     strokeType,
     strokeColor,
@@ -120,6 +124,7 @@ const Index = (props: LeafletMapProps) => {
   const svgLoadedRef = useRef(Promise.resolve());
   const tileLayerRef = useRef<L.TileLayer>();
   const markerGroupsRef = useRef<L.LayerGroup[]>([]);
+  const routeGroupRef = useRef<L.LayerGroup>();
   const drawPaneRef = useRef<L.LayerGroup>();
   const drawStrokesRef = useRef<DrawStroke[]>([]);
   const drawingRef = useRef<{ points: L.LatLng[]; layer?: L.Polyline }>();
@@ -337,6 +342,25 @@ const Index = (props: LeafletMapProps) => {
       group.addTo(map);
       markerGroupsRef.current.push(group);
     });
+  };
+
+  const renderRoute = (map: L.Map) => {
+    if (routeGroupRef.current) {
+      map.removeLayer(routeGroupRef.current);
+      routeGroupRef.current = undefined;
+    }
+    if (!routePlan?.nodes.length || routePlan.mapId !== mapData.id) {
+      return;
+    }
+    const group = buildRoutePlan(map, routePlan.nodes, heightRange, activeLayer);
+    group.addTo(map);
+    routeGroupRef.current = group;
+    const latlngs = routePlan.nodes.map((node) => pos({ x: node.x, z: node.z }));
+    if (latlngs.length === 1) {
+      map.setView(latlngs[0], Math.min(map.getMaxZoom(), 4), { animate: false });
+    } else {
+      map.fitBounds(L.latLngBounds(latlngs), { padding: [48, 48], maxZoom: 4, animate: false });
+    }
   };
 
   const setSvgLayerVisibility = (layerName?: string) => {
@@ -662,10 +686,19 @@ const Index = (props: LeafletMapProps) => {
     if (!map) {
       return;
     }
+    renderRoute(map);
+  }, [routePlan, mapData.id, heightRange, activeLayer]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
     const layers: L.Layer[] = [];
     markerGroupsRef.current.forEach((group) => {
       group.eachLayer((layer) => layers.push(layer));
     });
+    routeGroupRef.current?.eachLayer((layer) => layers.push(layer));
     syncLevelVisibility(layers, heightRange, activeLayer);
   }, [heightRange, activeLayer]);
 

@@ -12,11 +12,14 @@ import { consumeImageSearchQuota } from '../quota/store.js';
  */
 export const requireImageSearchEnabled: RequestHandler = (_req, _res, next) => {
   if (!config.zhipu.apiKey) {
-    next(serviceUnavailable('按图识别服务未配置，请联系管理员设置 ZHIPU_API_KEY'));
+    next(serviceUnavailable('AI 服务未配置，请联系管理员设置 ZHIPU_API_KEY'));
     return;
   }
   next();
 };
+
+/** 与按图搜索共用同一套智谱密钥开关。 */
+export const requireZhipuEnabled = requireImageSearchEnabled;
 
 /**
  * 扣一次每日额度。
@@ -33,10 +36,10 @@ export const consumeImageSearchQuotaMiddleware: RequestHandler = (req, res, next
   const quota = consumeImageSearchQuota(userId);
   if (!quota.ok) {
     if (quota.limit <= 0) {
-      next(tooManyRequests('你的账号暂未开通按图搜索额度，请联系管理员'));
+      next(tooManyRequests('你的账号暂未开通 AI 额度，请联系管理员'));
       return;
     }
-    next(tooManyRequests(`按图搜索每天最多使用 ${quota.limit} 次，请明天再试或联系管理员提额`));
+    next(tooManyRequests(`AI 功能每天最多使用 ${quota.limit} 次，请明天再试或联系管理员提额`));
     return;
   }
   // 识别成功后随响应回带，前端可以提示「今日剩余 n 次」。

@@ -27,3 +27,29 @@ export const imageSearchSchema = z.object({
     .min(1, '请至少上传一张图片')
     .max(MAX_IMAGES, `最多上传 ${MAX_IMAGES} 张图片`),
 });
+
+/** 与前端当前任务上限一致，一次方案不会超过这个规模。 */
+export const MAX_PLAN_TASKS = 50;
+export const MAX_PLAN_LOCATIONS = 80;
+
+const planLocationSchema = z.object({
+  key: z.string().regex(/^n\d{1,3}$/, '地点编号无效'),
+  taskId: z.string().min(1, '任务 id 无效').max(64, '任务 id 过长'),
+  type: z.string().max(40).optional(),
+  description: z.string().max(160).optional(),
+  x: z.number().finite(),
+  y: z.number().finite().optional(),
+  z: z.number().finite(),
+});
+
+export const generatePlanSchema = z.object({
+  mapName: z.string().trim().min(1, '请选择地图').max(40, '地图名称过长'),
+  taskIds: z
+    .array(z.string().min(1).max(64))
+    .min(1, '请至少选择一个任务')
+    .max(MAX_PLAN_TASKS, `一次最多规划 ${MAX_PLAN_TASKS} 个任务`),
+  locations: z
+    .array(planLocationSchema)
+    .max(MAX_PLAN_LOCATIONS, '地点过多，请减少任务后再试')
+    .default([]),
+});

@@ -5,8 +5,8 @@ import { parseBody } from '../auth/validators.js';
 import { asyncHandler } from '../http/errors.js';
 import type { ConsumeResult } from '../quota/store.js';
 import { consumeImageSearchQuotaMiddleware, requireImageSearchEnabled } from './middleware.js';
-import { recognizeTasksFromImages } from './zhipu.js';
-import { imageSearchSchema } from './validators.js';
+import { generateRoutePlan, recognizeTasksFromImages } from './zhipu.js';
+import { generatePlanSchema, imageSearchSchema } from './validators.js';
 
 const router = Router();
 
@@ -30,6 +30,27 @@ router.post(
   asyncHandler(async (_req, res) => {
     // 任务目录由服务端持有，请求体里只有图片。
     const result = await recognizeTasksFromImages(res.locals.images as string[]);
+    const quota = res.locals.quota as ConsumeResult;
+    res.json({
+      code: 200,
+      data: { ...result, quota: { limit: quota.limit, used: quota.used, remaining: quota.remaining } },
+    });
+  }),
+);
+
+const validateGeneratePlan: RequestHandler = (req, res, next) => {
+  res.locals.planInput = parseBody(generatePlanSchema, req.body);
+  next();
+};
+
+router.post(
+  '/generate-plan',
+  requireAuth,
+  requireImageSearchEnabled,
+  validateGeneratePlan,
+  consumeImageSearchQuotaMiddleware,
+  asyncHandler(async (_req, res) => {
+    const result = await generateRoutePlan(res.locals.planInput);
     const quota = res.locals.quota as ConsumeResult;
     res.json({
       code: 200,

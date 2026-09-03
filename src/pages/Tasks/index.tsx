@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import classNames from 'classnames';
 import { useRecoilState } from 'recoil';
 
+import { loadMapTasks, refreshMapTasks } from '@/data/loadMaps';
 import { CatalogTask, loadTaskCatalog, refreshTaskCatalog } from '@/data/taskCatalog';
 import usePreferences from '@/features/preferences/hooks/usePreferences';
 import { MAX_CURRENT_TASKS } from '@/features/preferences/types';
@@ -12,6 +13,7 @@ import langState from '@/store/lang';
 
 import AppNav from '@/components/AppNav';
 
+import GeneratePlanMenu from './GeneratePlanMenu';
 import ImageSearchModal from './ImageSearchModal';
 
 import './style.less';
@@ -55,6 +57,7 @@ const Index = () => {
   } = usePreferences();
 
   const [tasks, setTasks] = useState<CatalogTask[]>(loadTaskCatalog);
+  const [mapTasks, setMapTasks] = useState(loadMapTasks);
   const [keyword, setKeyword] = useState('');
   const [trader, setTrader] = useState('all');
   const [mapName, setMapName] = useState('all');
@@ -67,6 +70,11 @@ const Index = () => {
     refreshTaskCatalog().then((next) => {
       if (next?.length) {
         setTasks(next);
+      }
+    });
+    refreshMapTasks().then((next) => {
+      if (next?.length) {
+        setMapTasks(next);
       }
     });
   }, []);
@@ -328,6 +336,7 @@ const Index = () => {
             <span className="tasks-page-current-count">
               {currentTaskIds.length} / {MAX_CURRENT_TASKS}
             </span>
+            <GeneratePlanMenu lang={lang} currentTasks={currentTasks} mapTasks={mapTasks} />
             {currentTaskIds.length > 0 && (
               <button
                 type="button"
