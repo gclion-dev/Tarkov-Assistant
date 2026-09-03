@@ -79,6 +79,7 @@ export default {
     imageSearchTooLarge: '单张图片不能超过 {n}MB',
     imageSearchReadError: '图片处理失败，请换一张试试',
     imageSearchRemove: '移除图片',
+    imageSearchQuota: '今日按图搜索剩余 {remaining} / {limit} 次',
   },
 
   // 联系信息
@@ -110,6 +111,7 @@ export default {
     extractPmc: 'PMC 撤离',
     extractScav: 'Scav 撤离',
     extractShared: '共享撤离',
+    extractTransit: '转移点',
     spawnScav: 'Scav',
     spawnSniper: '狙击 Scav',
     spawnBoss: 'Boss',
@@ -152,6 +154,11 @@ export default {
     inviteCode: '邀请码',
     inviteCodeHint: '注册需要邀请码，请向管理员索取',
     failed: '登录失败',
+    // 地图右上角的账户入口
+    entryLogin: '登录',
+    entryLogout: '退出',
+    loggedOut: '已退出登录',
+    logoutFailed: '退出失败',
   },
 
   // 房间

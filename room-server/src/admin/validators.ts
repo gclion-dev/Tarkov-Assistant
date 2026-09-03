@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { BATCH_LIMIT, MAX_USES_LIMIT, NOTE_MAX } from '../invites/store.js';
+import { DAILY_LIMIT_MAX } from '../quota/store.js';
 
 export const adminLoginSchema = z.object({
   username: z
@@ -76,4 +77,17 @@ export const inviteCodeCreateSchema = z.object({
 
 export const inviteCodeStatusSchema = z.object({
   disabled: z.boolean({ required_error: '缺少 disabled 参数' }),
+});
+
+export const userImageSearchQuotaSchema = z.object({
+  /**
+   * 该用户每天可用的按图搜索次数。
+   * null 表示清除单独分配、回到服务端的全局默认值；0 表示不允许该用户使用。
+   */
+  dailyLimit: z
+    .number({ invalid_type_error: '额度必须是数字' })
+    .int('额度必须是整数')
+    .min(0, '额度不能为负')
+    .max(DAILY_LIMIT_MAX, `额度最多 ${DAILY_LIMIT_MAX} 次/天`)
+    .nullable(),
 });

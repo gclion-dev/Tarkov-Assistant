@@ -82,6 +82,23 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_invite_code_uses_code ON invite_code_uses(code_id);
+
+  -- 任务页「按图搜索」的每日用量。这一项直接花大模型额度，所以必须落库：
+  -- 原先用内存限流器计数，room-server 一重启额度就白送一轮。
+  --
+  -- day 存 'YYYY-MM-DD' 字符串而不是时间戳区间：额度是「按自然日」发的，
+  -- 存日期字符串可以让「取今天的用量」退化成一次主键命中，也便于人工排查。
+  -- 具体按哪个时区切日由 config.zhipu.dayOffsetMinutes 决定。
+  CREATE TABLE IF NOT EXISTS image_search_usage (
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day        TEXT NOT NULL,
+    count      INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+    PRIMARY KEY (user_id, day)
+  );
+
+  -- 按 day 清理历史行时用。
+  CREATE INDEX IF NOT EXISTS idx_image_search_usage_day ON image_search_usage(day);
 `);
 
 const ensureColumn = (table: string, column: string, definition: string) => {
@@ -105,6 +122,12 @@ db.exec('UPDATE refresh_tokens SET family_id = id WHERE family_id IS NULL');
 // 存量用户默认 active，所以加字段对现有部署无感。
 ensureColumn('users', 'status', "TEXT NOT NULL DEFAULT 'active'");
 ensureColumn('users', 'status_updated_at', 'INTEGER');
+
+// 「按图搜索」的每日额度上限，由管理后台按用户分配。
+// NULL 表示沿用全局默认值（config.zhipu.dailyLimit），而不是「额度为 0」——
+// 存量用户和新注册用户都是 NULL，所以调整全局默认值对他们立刻生效。
+ensureColumn('users', 'image_search_daily_limit', 'INTEGER');
+ensureColumn('users', 'image_search_limit_updated_at', 'INTEGER');
 
 // 唯一索引对历史数据可能失败（例如旧库里已存在大小写不同的重复邮箱），
 // 这种情况下只告警，不阻塞服务启动。

@@ -14,6 +14,7 @@ import config from './config.js';
 import db from './db.js';
 import { errorHandler } from './http/errors.js';
 import preferencesRoutes from './preferences/routes.js';
+import { startImageSearchUsageCleanup } from './quota/store.js';
 import { startRoomCleanup } from './room/manager.js';
 import { setupRoomSocket } from './room/socket.js';
 import tasksRoutes from './tasks/routes.js';
@@ -63,6 +64,7 @@ setupRoomSocket(io);
 
 const stopRoomCleanup = startRoomCleanup();
 const stopSessionCleanup = startSessionCleanup();
+const stopQuotaCleanup = startImageSearchUsageCleanup();
 
 server.listen(config.port, () => {
   console.log(`[room-server] 已启动，监听 :${config.port}（${config.nodeEnv}）`);
@@ -77,6 +79,7 @@ const shutdown = (signal: string) => {
   console.log(`[room-server] 收到 ${signal}，开始退出...`);
   stopRoomCleanup();
   stopSessionCleanup();
+  stopQuotaCleanup();
   const done = () => {
     try {
       db.close();

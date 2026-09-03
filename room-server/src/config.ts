@@ -183,10 +183,17 @@ export const config = {
     apiKey: process.env.ZHIPU_API_KEY?.trim() || '',
     model: process.env.ZHIPU_MODEL?.trim() || 'glm-5.3-flash',
     /**
-     * 每个登录用户每 24 小时可用的识别次数。计数在内存里，服务重启即重置。
-     * 至少为 1：readInt 会把空字符串读成 0，那样等于悄悄停用功能。
+     * 每个用户每天的默认识别次数。用量落在 sqlite 的 image_search_usage 表里，
+     * 重启不会重置。管理后台可以按用户单独提额，那个值优先于这里。
+     *
+     * 允许为 0：全局默认设成 0 就等于「默认不开放，只有管理员点名提额的人能用」。
      */
-    dailyLimit: Math.max(1, readInt(process.env.ZHIPU_DAILY_LIMIT, 10)),
+    dailyLimit: Math.max(0, readInt(process.env.ZHIPU_DAILY_LIMIT, 1)),
+    /**
+     * 额度按自然日重置，这里是判定「今天」用的时区偏移（分钟）。
+     * 默认 480 即 UTC+8：容器通常跑在 UTC 上，不校正的话额度会在北京时间早上 8 点才刷新。
+     */
+    dayOffsetMinutes: readInt(process.env.ZHIPU_DAY_OFFSET_MINUTES, 480),
   },
 } as const;
 

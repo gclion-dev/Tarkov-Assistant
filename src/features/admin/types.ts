@@ -12,6 +12,18 @@ export interface AdminUser {
   activeSessions: number;
   /** 云端偏好最后一次写入时间，没同步过则为 null。 */
   prefsUpdatedAt: number | null;
+  /** 按图搜索的当天额度。 */
+  imageSearch: AdminImageSearchQuota;
+}
+
+export interface AdminImageSearchQuota {
+  /** 当天可用次数上限。 */
+  limit: number;
+  /** 当天已用次数。 */
+  used: number;
+  remaining: number;
+  /** true 表示管理员为这个用户单独分配过额度；false 表示跟随全局默认值。 */
+  custom: boolean;
 }
 
 export interface AdminStats {
@@ -26,6 +38,10 @@ export interface AdminStats {
   inviteRequired: boolean;
   /** 未停用、未用完、未过期的邀请码数量。 */
   inviteAvailable: number;
+  /** 今天全站的按图搜索调用次数。 */
+  imageSearchToday: number;
+  /** 未单独分配额度的用户按这个上限算。 */
+  imageSearchDefaultLimit: number;
 }
 
 export interface AdminUserPage {

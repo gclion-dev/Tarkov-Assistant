@@ -3,6 +3,8 @@ import { request } from '@/features/auth/services/http';
 export interface ImageSearchResult {
   taskIds: string[];
   summary: string;
+  /** 本次调用后的每日额度情况，用来提示还能用几次。 */
+  quota: { limit: number; used: number; remaining: number };
 }
 
 /**

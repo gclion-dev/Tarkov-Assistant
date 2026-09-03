@@ -279,8 +279,21 @@
   }
 }
 
+/** 「这个额度是管理员单独分配的」标记，跟在用量数字后面。 */
+.admin-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: #9a8866;
+  background-color: #9a886633;
+  font-size: 11px;
+}
+
 .admin-table-actions {
   display: flex;
+  // 加上「额度」之后一行有四个按钮，窄屏要能换行而不是把表格撑出横向滚动。
+  flex-wrap: wrap;
   gap: 6px;
 }
 

@@ -8,7 +8,7 @@ import { z } from 'zod';
  * 灰度期间不会把用户的保存直接打挂。
  */
 
-const faction = z.enum(['pmc', 'scav', 'shared']);
+const faction = z.enum(['pmc', 'scav', 'shared', 'transit']);
 
 /** 这些数组存的都是固定的图层 key，不是用户输入，长度和元素都可以卡得很紧。 */
 const keyList = (max: number) => z.array(z.string().min(1).max(64)).max(max);
@@ -20,7 +20,7 @@ export const preferencesPayloadSchema = z.object({
   activeLayerName: z.string().min(1).max(64).optional(),
   activeLayerMapId: mapId.optional(),
 
-  extracts: z.array(faction).max(3),
+  extracts: z.array(faction).max(4),
   locks: keyList(32),
   lootKeys: keyList(64),
   spawns: keyList(32),

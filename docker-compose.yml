@@ -48,8 +48,10 @@ services:
       # 留空时该接口返回 503，其余功能不受影响。
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
       ZHIPU_MODEL: ${ZHIPU_MODEL:-glm-5.3-flash}
-      # 每个登录用户每天的识别次数上限，直接对应大模型额度消耗。
-      ZHIPU_DAILY_LIMIT: ${ZHIPU_DAILY_LIMIT:-10}
+      # 每个用户每天的默认识别次数。管理后台可按用户单独提额，那个值优先于这里。
+      ZHIPU_DAILY_LIMIT: ${ZHIPU_DAILY_LIMIT:-1}
+      # 额度按自然日重置时的时区偏移（分钟），默认 480 即 UTC+8。
+      ZHIPU_DAY_OFFSET_MINUTES: ${ZHIPU_DAY_OFFSET_MINUTES:-480}
     volumes:
       - room-data:/app/data
     restart: unless-stopped

@@ -16,6 +16,7 @@ import { ApiError, getErrorMessage } from '@/features/auth/services/http';
 
 import ConfirmDialog, { type ConfirmRequest } from './components/ConfirmDialog';
 import InvitePanel from './components/InvitePanel';
+import QuotaDialog, { type QuotaRequest } from './components/QuotaDialog';
 
 import './style.less';
 
@@ -107,6 +108,7 @@ const StatsBar = ({ stats }: { stats?: AdminStats }) => {
       // 要求邀请码但一个可用的都没有，等于注册通道关着，值得标红提醒。
       warn: !!stats?.inviteRequired && stats.inviteAvailable === 0,
     },
+    { label: '今日按图搜索', value: stats?.imageSearchToday ?? '—' },
   ];
   return (
     <div className="admin-stats">
@@ -143,6 +145,7 @@ const AdminDashboard = ({
   /** 正在处理中的用户 id，用于禁用该行的按钮防重复点击。 */
   const [busyId, setBusyId] = useState<string>();
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const [quotaRequest, setQuotaRequest] = useState<QuotaRequest | null>(null);
   const [tab, setTab] = useState<'users' | 'invites'>('users');
 
   /**
@@ -249,6 +252,37 @@ const AdminDashboard = ({
       confirmText: '停用',
       danger: true,
       onConfirm: () => applyStatus(user, 'disabled'),
+    });
+  };
+
+  const handleQuota = (user: AdminUser) => {
+    setQuotaRequest({
+      user,
+      defaultLimit: stats?.imageSearchDefaultLimit ?? user.imageSearch.limit,
+      onSubmit: (dailyLimit) => {
+        runAction(
+          user.id,
+          async () => {
+            await adminApi.setImageSearchQuota(user.id, dailyLimit);
+            toast.success(
+              dailyLimit === null
+                ? `${user.email} 的按图搜索额度已回到默认值`
+                : `${user.email} 的按图搜索额度已设为每天 ${dailyLimit} 次`,
+            );
+          },
+          '修改额度失败',
+        );
+      },
+      onReset: () => {
+        runAction(
+          user.id,
+          async () => {
+            await adminApi.resetImageSearchUsage(user.id);
+            toast.success(`已清空 ${user.email} 今日的按图搜索用量`);
+          },
+          '清空用量失败',
+        );
+      },
     });
   };
 
@@ -370,13 +404,14 @@ const AdminDashboard = ({
                   <th>注册时间</th>
                   <th>登录设备</th>
                   <th>设置同步</th>
+                  <th>按图额度</th>
                   <th className="admin-table-actions-head">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {users.length === 0 && (
                   <tr>
-                    <td className="admin-empty" colSpan={7}>
+                    <td className="admin-empty" colSpan={8}>
                       {loading ? '加载中...' : '没有符合条件的用户'}
                     </td>
                   </tr>
@@ -396,7 +431,20 @@ const AdminDashboard = ({
                     <td className="admin-mono">{formatTime(user.createdAt)}</td>
                     <td className="admin-mono">{user.activeSessions}</td>
                     <td className="admin-mono">{formatTime(user.prefsUpdatedAt)}</td>
+                    <td className="admin-mono">
+                      {user.imageSearch.used} / {user.imageSearch.limit}
+                      {/* 标出「这个人的额度是单独给的」，否则看不出和默认值的区别。 */}
+                      {user.imageSearch.custom && <span className="admin-tag">自定义</span>}
+                    </td>
                     <td className="admin-table-actions">
+                      <button
+                        type="button"
+                        className="admin-ghost"
+                        disabled={busyId === user.id}
+                        onClick={() => handleQuota(user)}
+                      >
+                        额度
+                      </button>
                       <button
                         type="button"
                         className="admin-ghost"
@@ -453,6 +501,7 @@ const AdminDashboard = ({
       )}
 
       <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
+      <QuotaDialog request={quotaRequest} onClose={() => setQuotaRequest(null)} />
     </div>
   );
 };

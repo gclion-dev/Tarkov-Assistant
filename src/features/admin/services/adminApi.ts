@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
 import type {
+  AdminImageSearchQuota,
   AdminInviteCode,
   AdminInviteCreateInput,
   AdminInvitePage,
@@ -91,6 +92,20 @@ export const adminApi = {
       url: `/users/${id}/status`,
       method: 'PATCH',
       data: { status },
+    }),
+
+  /** dailyLimit 传 null 表示回到全局默认值，传 0 表示不允许该用户使用。 */
+  setImageSearchQuota: (id: string, dailyLimit: number | null) =>
+    request<{ id: string; imageSearch: AdminImageSearchQuota }>({
+      url: `/users/${id}/image-search-quota`,
+      method: 'PATCH',
+      data: { dailyLimit },
+    }),
+
+  resetImageSearchUsage: (id: string) =>
+    request<{ id: string; cleared: number; imageSearch: AdminImageSearchQuota }>({
+      url: `/users/${id}/image-search-quota/reset`,
+      method: 'POST',
     }),
 
   forceLogout: (id: string) =>

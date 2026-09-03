@@ -17,6 +17,14 @@ import {
   setInviteCodeDisabled,
   toInviteCodeView,
 } from '../invites/store.js';
+import {
+  buildImageSearchQuota,
+  countImageSearchToday,
+  getImageSearchQuota,
+  loadImageSearchUsage,
+  resetImageSearchUsage,
+  setImageSearchDailyLimit,
+} from '../quota/store.js';
 import { countRooms } from '../room/manager.js';
 import { disconnectUserSockets } from '../room/socket.js';
 import {
@@ -33,6 +41,7 @@ import {
   inviteCodeListQuerySchema,
   inviteCodeStatusSchema,
   userIdSchema,
+  userImageSearchQuotaSchema,
   userListQuerySchema,
   userStatusSchema,
 } from './validators.js';
@@ -149,6 +158,10 @@ router.get('/stats', (_req, res) => {
       inviteRequired: config.invite.required,
       /** 当前还能用的邀请码数量（未停用、未用完、未过期）。 */
       inviteAvailable: countAvailableInviteCodes(),
+      /** 今天全站的按图搜索调用次数，用来盯大模型额度消耗。 */
+      imageSearchToday: countImageSearchToday(),
+      /** 未单独分配额度的用户按这个上限算。 */
+      imageSearchDefaultLimit: config.zhipu.dailyLimit,
     },
   });
 });
@@ -162,6 +175,7 @@ interface UserListRow {
   status_updated_at: number | null;
   sessions: number;
   prefs_updated_at: number | null;
+  image_search_daily_limit: number | null;
 }
 
 router.get('/users', (req, res) => {
@@ -195,6 +209,7 @@ router.get('/users', (req, res) => {
     .prepare(
       `SELECT
          u.id, u.email, u.nickname, u.status, u.created_at, u.status_updated_at,
+         u.image_search_daily_limit,
          (SELECT count(*) FROM refresh_tokens t
             WHERE t.user_id = u.id AND t.revoked = 0 AND t.expires_at > @now) AS sessions,
          (SELECT p.updated_at FROM user_preferences p WHERE p.user_id = u.id) AS prefs_updated_at
@@ -209,6 +224,9 @@ router.get('/users', (req, res) => {
       limit: pageSize,
       offset: (page - 1) * pageSize,
     }) as UserListRow[];
+
+  // 当天用量一次批量查出来，避免每行一次查询。
+  const usage = loadImageSearchUsage(rows.map((row) => row.id));
 
   res.json({
     code: 200,
@@ -225,6 +243,11 @@ router.get('/users', (req, res) => {
         statusUpdatedAt: row.status_updated_at,
         activeSessions: row.sessions,
         prefsUpdatedAt: row.prefs_updated_at,
+        /** 按图搜索的当天额度。custom 为 false 表示跟随全局默认值。 */
+        imageSearch: buildImageSearchQuota(
+          row.image_search_daily_limit,
+          usage.get(row.id) ?? 0,
+        ),
       })),
     },
   });
@@ -267,6 +290,35 @@ router.patch('/users/:id/status', (req, res) => {
   }
 
   res.json({ code: 200, data: { id, status, disconnected } });
+});
+
+/**
+ * 分配某个用户的按图搜索每日额度。
+ * dailyLimit 传 null 表示清除单独分配、回到全局默认值；传 0 表示不允许该用户使用。
+ */
+router.patch('/users/:id/image-search-quota', (req, res) => {
+  const id = parseUserId(req.params.id);
+  const { dailyLimit } = parseBody(userImageSearchQuotaSchema, req.body);
+
+  const user = findUser(id);
+  if (!user) {
+    throw notFound('用户不存在');
+  }
+
+  setImageSearchDailyLimit(id, dailyLimit);
+  // 回带最新的额度视图，前端不必为了刷新一个数字再拉一整页。
+  res.json({ code: 200, data: { id, imageSearch: getImageSearchQuota(id) } });
+});
+
+/** 清空某个用户当天的已用次数，用于当天临时放行。 */
+router.post('/users/:id/image-search-quota/reset', (req, res) => {
+  const id = parseUserId(req.params.id);
+  const user = findUser(id);
+  if (!user) {
+    throw notFound('用户不存在');
+  }
+  const cleared = resetImageSearchUsage(id);
+  res.json({ code: 200, data: { id, cleared, imageSearch: getImageSearchQuota(id) } });
 });
 
 router.post('/users/:id/logout', (req, res) => {

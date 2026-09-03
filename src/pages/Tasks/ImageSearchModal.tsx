@@ -10,7 +10,10 @@ import {
   compressImageToDataUrl,
   MAX_SOURCE_BYTES,
 } from '@/features/tasks/services/compressImage';
-import { searchTasksByImages } from '@/features/tasks/services/imageSearchApi';
+import {
+  type ImageSearchResult,
+  searchTasksByImages,
+} from '@/features/tasks/services/imageSearchApi';
 import useI18N from '@/i18n';
 
 import './imageSearchModal.less';
@@ -61,6 +64,7 @@ const ImageSearchModal = ({
   const [matchedTasks, setMatchedTasks] = useState<CatalogTask[]>([]);
   const [summary, setSummary] = useState('');
   const [addResult, setAddResult] = useState<AddTasksResult | null>(null);
+  const [quota, setQuota] = useState<ImageSearchResult['quota'] | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   // 目录有 500+ 条，别在每次 render 时重建。
@@ -138,6 +142,7 @@ const ImageSearchModal = ({
     setMatchedTasks([]);
     setSummary('');
     setAddResult(null);
+    setQuota(null);
     try {
       const result = await searchTasksByImages(images.map((item) => item.dataUrl));
       const matched = result.taskIds
@@ -145,6 +150,7 @@ const ImageSearchModal = ({
         .filter((task): task is CatalogTask => Boolean(task));
       setMatchedTasks(matched);
       setSummary(result.summary);
+      setQuota(result.quota ?? null);
       setAddResult(onAddTasks(result.taskIds));
       setPhase('done');
     } catch (err) {
@@ -276,6 +282,13 @@ const ImageSearchModal = ({
                 {t('tasks.imageSearchOverLimit')
                   .replace('{n}', String(addResult.overLimit))
                   .replace('{max}', String(MAX_CURRENT_TASKS))}
+              </p>
+            )}
+            {quota && (
+              <p className="tasks-image-modal-quota">
+                {t('tasks.imageSearchQuota')
+                  .replace('{remaining}', String(quota.remaining))
+                  .replace('{limit}', String(quota.limit))}
               </p>
             )}
           </div>
