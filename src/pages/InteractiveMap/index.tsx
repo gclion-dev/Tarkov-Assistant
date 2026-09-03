@@ -25,6 +25,7 @@ import {
 } from '@/utils/fsHandleStore';
 import { tarkovGamePathResolve } from '@/utils/tarkov';
 
+import AccountEntry from '@/components/AccountEntry';
 import AppNav from '@/components/AppNav';
 
 import useI18N from '../../i18n';
@@ -807,6 +808,7 @@ const Index = () => {
                 {resolution.width > 1280 && <Coordinate position={cursorPosition} />}
               </div>
               <div className="im-header-right-2">
+                <AccountEntry />
                 <AdditionFunc />
               </div>
             </div>

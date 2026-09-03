@@ -1,0 +1,63 @@
+// 视觉沿用互动地图右上角那排圆角按钮（见 UI/AdditionFunc/style.less），
+// 放在一起才不像是外挂上去的。
+.account-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  &-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 6px 12px;
+    border: 3px solid #2c2c2c;
+    border-radius: 32px;
+    color: #ffffff;
+    background-color: #1c1c1c;
+    font-size: 14px;
+    line-height: 1;
+    white-space: nowrap;
+    transition: all 0.3s;
+    cursor: pointer;
+    .anticon {
+      font-size: 16px;
+    }
+    &:hover:not(:disabled):not(.is-static) {
+      color: #288828;
+      border-color: #288828;
+    }
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    // 昵称只是展示，不给交互反馈。
+    &.is-static {
+      color: #9a8866;
+      cursor: default;
+    }
+    span {
+      // 昵称可能很长，挤占地图工具栏的空间。
+      max-width: 96px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+}
+
+// 窄屏：昵称文字让位给地图工具，只留头像图标；
+// 同时跟 AdditionFunc 一样改成纵向排列，两者并排时不会把顶栏挤爆。
+@media screen and (max-width: 750px) {
+  .account-entry {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    &-item {
+      padding: 6px 8px;
+      font-size: 12px;
+      &.is-static span {
+        display: none;
+      }
+    }
+  }
+}
