@@ -15,8 +15,27 @@ import {
 } from './catalog.js';
 
 const ZHIPU_API_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-/** 思考模式下单次识别耗时较长，超时给到 2 分钟。nginx 侧的 proxy_read_timeout 要大于这个值。 */
-const REQUEST_TIMEOUT_MS = 120_000;
+/**
+ * 思考模式下单次调用耗时较长，超时给到 3 分钟。
+ *
+ * 整条链路上这个值必须是最小的，才能让用户看到我们自己的中文超时提示而不是代理的 504 页面：
+ * 服务端 180s < 前端 axios 200s < nginx /api/tasks/ 的 proxy_read_timeout 210s。
+ * 改这里要同步改 src/features/tasks/services/*Api.ts 和 docker/nginx.conf。
+ */
+const REQUEST_TIMEOUT_MS = 180_000;
+
+/**
+ * 思考档位。GLM-5.3-Flash 支持 low / high / max，不传或传非法值都按 max 处理。
+ *
+ * max 是「深度思考」，实测同一个规划 prompt 要 190s 以上（思考 5500+ tokens），
+ * 会直接顶穿上面的超时变成 504；high 约 24s、low 约 14s。
+ * 因此每个调用点必须显式选档，不能依赖默认值。
+ */
+type ReasoningEffort = 'low' | 'high' | 'max';
+
+interface ZhipuCallOptions {
+  reasoningEffort: ReasoningEffort;
+}
 
 const COORD_MIN = -50_000;
 const COORD_MAX = 50_000;
@@ -123,7 +142,11 @@ const mapUpstreamFailure = (status: number, body: ZhipuChatResponse, fallback: s
   return badGateway(fallback);
 };
 
-const callZhipu = async (content: string | ZhipuMessageContent[], timeoutLabel: string) => {
+const callZhipu = async (
+  content: string | ZhipuMessageContent[],
+  timeoutLabel: string,
+  options: ZhipuCallOptions,
+) => {
   if (!config.zhipu.apiKey) {
     throw serviceUnavailable('AI 服务未配置，请联系管理员设置 ZHIPU_API_KEY');
   }
@@ -142,8 +165,10 @@ const callZhipu = async (content: string | ZhipuMessageContent[], timeoutLabel: 
         // 官方对 GLM-5.3-Flash 的推荐设置：thinking 只支持 enabled。
         temperature: 1,
         top_p: 0.95,
-        reasoning_effort: 'max',
-        thinking: { type: 'enabled', clear_thinking: false },
+        reasoning_effort: options.reasoningEffort,
+        // 不开 clear_thinking: false。保留思考内容只对需要把 reasoning_content
+        // 原样回传的多轮 agent 场景有意义，这里都是单轮出 JSON，开着只是白烧输出 tokens。
+        thinking: { type: 'enabled' },
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -182,7 +207,8 @@ export const recognizeTasksFromImages = async (images: string[]) => {
     })),
   ];
 
-  const rawContent = await callZhipu(content, '按图识别');
+  // 截图识别本质是文字比对，用 low 换稳定响应；max 档在 5 张图 + 517 条目录下有超时风险。
+  const rawContent = await callZhipu(content, '按图识别', { reasoningEffort: 'low' });
 
   let parsed: Record<string, unknown>;
   try {
@@ -321,7 +347,11 @@ export const generateRoutePlan = async (input: {
     y: typeof loc.y === 'number' && Number.isFinite(loc.y) ? loc.y : 0,
   }));
 
-  const rawContent = await callZhipu(buildPlanPrompt(input.mapName, tasks, located), '生成方案');
+  // 排序本身不需要深度思考，而且模型漏点还有 appendNearest 兜底，
+  // 用 high 换稳定的响应时间（max 实测会超 120s 直接 504）。
+  const rawContent = await callZhipu(buildPlanPrompt(input.mapName, tasks, located), '生成方案', {
+    reasoningEffort: 'high',
+  });
 
   let parsed: Record<string, unknown>;
   try {

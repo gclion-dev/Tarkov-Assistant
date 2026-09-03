@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
@@ -34,7 +35,10 @@ const GeneratePlanMenu = ({ lang, currentTasks, mapTasks }: GeneratePlanMenuProp
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 240, maxHeight: 360 });
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const groups = useMemo<MapGroup[]>(() => {
     const byMap = new Map<string, MapGroup>();
@@ -65,14 +69,53 @@ const GeneratePlanMenu = ({ lang, currentTasks, mapTasks }: GeneratePlanMenuProp
     }
   }, [loading]);
 
+  const updateMenuPos = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) {
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    // 用 clientWidth/clientHeight 而不是 innerWidth/innerHeight：后者含滚动条宽度，贴右边时菜单会压在滚动条上。
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const width = Math.min(240, viewportWidth - 16);
+    const left = Math.min(Math.max(8, rect.right - width), viewportWidth - width - 8);
+    const top = rect.bottom + 6;
+    const maxHeight = Math.max(120, viewportHeight - top - 8);
+    // 滚动时每个事件都会调用，位置没变就不要触发重渲染。
+    setMenuPos((prev) => {
+      const same =
+        prev.top === top &&
+        prev.left === left &&
+        prev.width === width &&
+        prev.maxHeight === maxHeight;
+      return same ? prev : { top, left, width, maxHeight };
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    updateMenuPos();
+    window.addEventListener('resize', updateMenuPos);
+    window.addEventListener('scroll', updateMenuPos, true);
+    return () => {
+      window.removeEventListener('resize', updateMenuPos);
+      window.removeEventListener('scroll', updateMenuPos, true);
+    };
+  }, [open, updateMenuPos]);
+
   useEffect(() => {
     if (!open) {
       return undefined;
     }
     const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        close();
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+      close();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -88,7 +131,8 @@ const GeneratePlanMenu = ({ lang, currentTasks, mapTasks }: GeneratePlanMenuProp
   }, [open, close]);
 
   const handleOpen = () => {
-    if (isLoading) {
+    // 生成中不允许收起菜单，否则 loading / error 提示会被藏起来。
+    if (isLoading || loading) {
       return;
     }
     if (!isAuthenticated) {
@@ -152,32 +196,50 @@ const GeneratePlanMenu = ({ lang, currentTasks, mapTasks }: GeneratePlanMenuProp
 
   return (
     <div className="tasks-plan" ref={rootRef}>
-      <button type="button" className="tasks-page-current-plan" onClick={handleOpen}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="tasks-page-current-plan"
+        onClick={handleOpen}
+      >
         {t('tasks.generatePlan')}
       </button>
-      {open && (
-        <div className="tasks-plan-menu" role="menu" aria-label={t('tasks.generatePlan')}>
-          <div className="tasks-plan-menu-title">{t('tasks.planPickMap')}</div>
-          {groups.map((group) => (
-            <button
-              key={group.mapId}
-              type="button"
-              className="tasks-plan-menu-item"
-              disabled={loading}
-              onClick={() => {
-                handleSelect(group).catch(() => undefined);
-              }}
-            >
-              <span>{group.mapName}</span>
-              <span className="tasks-plan-menu-count">
-                {t('tasks.planMapCount').replace('{n}', String(group.count))}
-              </span>
-            </button>
-          ))}
-          {loading && <p className="tasks-plan-menu-status">{t('tasks.planLoading')}</p>}
-          {error && <p className="tasks-plan-menu-error">{error}</p>}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="tasks-plan-menu"
+            role="menu"
+            aria-label={t('tasks.generatePlan')}
+            style={{
+              top: menuPos.top,
+              left: menuPos.left,
+              width: menuPos.width,
+              maxHeight: menuPos.maxHeight,
+            }}
+          >
+            <div className="tasks-plan-menu-title">{t('tasks.planPickMap')}</div>
+            {groups.map((group) => (
+              <button
+                key={group.mapId}
+                type="button"
+                className="tasks-plan-menu-item"
+                disabled={loading}
+                onClick={() => {
+                  handleSelect(group).catch(() => undefined);
+                }}
+              >
+                <span>{group.mapName}</span>
+                <span className="tasks-plan-menu-count">
+                  {t('tasks.planMapCount').replace('{n}', String(group.count))}
+                </span>
+              </button>
+            ))}
+            {loading && <p className="tasks-plan-menu-status">{t('tasks.planLoading')}</p>}
+            {error && <p className="tasks-plan-menu-error">{error}</p>}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

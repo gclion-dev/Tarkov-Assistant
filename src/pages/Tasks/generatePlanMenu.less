@@ -1,59 +1,58 @@
 .tasks-plan {
-  position: relative;
   flex-shrink: 0;
-  &-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 20;
-    width: min(240px, calc(100vw - 48px));
+}
+
+// 菜单通过 portal 挂到 body 上，位置和 max-height 由 JS 按按钮位置写成 inline style。
+.tasks-plan-menu {
+  position: fixed;
+  z-index: 1200;
+  padding: 8px;
+  overflow-y: auto;
+  border: 3px solid #2c2c2c;
+  border-radius: 8px;
+  background-color: #1c1c1c;
+  box-shadow: 0 8px 24px #00000088;
+  &-title {
+    padding: 4px 8px 8px;
+    color: #888888;
+    font-size: 12px;
+  }
+  &-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
     padding: 8px;
-    border: 3px solid #2c2c2c;
-    border-radius: 8px;
-    background-color: #1c1c1c;
-    box-shadow: 0 8px 24px #00000088;
-    &-title {
-      padding: 4px 8px 8px;
-      color: #888888;
-      font-size: 12px;
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    &:hover:not(:disabled) {
+      background-color: #28882833;
     }
-    &-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      width: 100%;
-      padding: 8px;
-      border: none;
-      border-radius: 6px;
-      color: #ffffff;
-      background: transparent;
-      text-align: left;
-      cursor: pointer;
-      &:hover:not(:disabled) {
-        background-color: #28882833;
-      }
-      &:disabled {
-        cursor: wait;
-        opacity: 0.6;
-      }
+    &:disabled {
+      cursor: wait;
+      opacity: 0.6;
     }
-    &-count {
-      color: #888888;
-      font-size: 12px;
-      white-space: nowrap;
-    }
-    &-status,
-    &-error {
-      margin: 8px 8px 4px;
-      font-size: 12px;
-      line-height: 1.5;
-    }
-    &-status {
-      color: #9a8866;
-    }
-    &-error {
-      color: #ff6b6b;
-    }
+  }
+  &-count {
+    color: #888888;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  &-status,
+  &-error {
+    margin: 8px 8px 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  &-status {
+    color: #9a8866;
+  }
+  &-error {
+    color: #ff6b6b;
   }
 }

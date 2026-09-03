@@ -53,5 +53,7 @@ export const generateTaskRoutePlan = (payload: {
     method: 'POST',
     url: '/api/tasks/generate-plan',
     data: payload,
-    timeout: 130_000,
+    // 服务端对上游的超时是 180s（zhipu.ts 的 REQUEST_TIMEOUT_MS），这里留一点余量，
+    // 让服务端先超时并回中文提示，而不是前端自己先断开。
+    timeout: 200_000,
   });
