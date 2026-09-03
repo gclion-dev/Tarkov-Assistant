@@ -104,6 +104,7 @@ const Index = (props: MarkerSelectProps) => {
     { key: 'pmc', label: t('marker.extractPmc'), icon: getIconCDN('extract_pmc') },
     { key: 'scav', label: t('marker.extractScav'), icon: getIconCDN('extract_scav') },
     { key: 'shared', label: t('marker.extractShared'), icon: getIconCDN('extract_shared') },
+    { key: 'transit', label: t('marker.extractTransit'), icon: getIconCDN('extract_transit') },
   ];
   const spawnOptions = [
     { key: 'scav', label: t('marker.spawnScav'), icon: getIconCDN('spawn_scav') },

@@ -75,7 +75,17 @@ export const sanitizePreferences = (raw: unknown): UserPreferences => {
     }
   });
   next.extracts = next.extracts.filter((item) =>
-    (['pmc', 'scav', 'shared'] as string[]).includes(item)) as InteractiveMap.Faction[];
+    (['pmc', 'scav', 'shared', 'transit'] as string[]).includes(item),
+  ) as InteractiveMap.Faction[];
+  // 老默认是 pmc/scav/shared 全开。新增转移点后，仍保持「撤离点全开」的观感。
+  if (
+    next.extracts.length === 3 &&
+    next.extracts.includes('pmc') &&
+    next.extracts.includes('scav') &&
+    next.extracts.includes('shared')
+  ) {
+    next.extracts = [...next.extracts, 'transit'];
+  }
   // 去重 + 截断放在 sanitize 里而不是只放在 UI 里：
   // 云端和别的标签页的数据也会走这条路，UI 的上限拦不住它们。
   next.currentTaskIds = Array.from(new Set(next.currentTaskIds.filter(Boolean))).slice(

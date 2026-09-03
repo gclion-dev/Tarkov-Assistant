@@ -63,6 +63,23 @@ export const transformJsonMaps = (
         top: extract.top,
         bottom: extract.bottom,
       })),
+      // 转移点在 API 里是独立的 transits 字段，合并进地图时按 faction=transit 显示。
+      transits: (raw.transits || [])
+        .filter((transit: any) => transit?.position)
+        .map((transit: any) => {
+          const name = translate(zh, transit.description) || '转移点';
+          const condition = translate(zh, transit.conditions);
+          return {
+            id: `transit-${transit.id}`,
+            name: condition ? `${name}（${condition}）` : name,
+            faction: 'transit' as const,
+            switches: [],
+            position: transit.position,
+            outline: transit.outline || [],
+            top: transit.top,
+            bottom: transit.bottom,
+          };
+        }),
       locks: (raw.locks || [])
         .filter((lock: any) => lock.position)
         .map((lock: any) => ({

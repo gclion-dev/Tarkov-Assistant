@@ -48,6 +48,14 @@ export const drawColorList = [{
   color: '#ff8800',
 }];
 
+/**
+ * 图标名 → 实际文件名的映射。多个游戏内对象共用一张图时在这里收敛。
+ *
+ * 图片全部放在 `src/assets/maps/interactive/`，由 vite 的 `publicDir: './src/assets'`
+ * 原样拷到产物根目录，所以 getIconCDN 拼出来的是 `./maps/interactive/xxx.png`。
+ * 新增一种标记时，图标要放进那个目录。早期还有一份 `src/assets/mapIcons/`，
+ * 内容是 maps/interactive 的子集且代码从未读它，只会被 publicDir 白白拷进产物，已删除。
+ */
 export const icons: any = {
   'container_bank-cash-register': 'container_cash-register',
   'container_bank-safe': 'container_safe',
@@ -80,6 +88,7 @@ export const icons: any = {
   extract_pmc: 'extract_pmc',
   extract_scav: 'extract_scav',
   extract_shared: 'extract_shared',
+  extract_transit: 'extract_transit',
   hazard: 'hazard',
   key: 'key',
   lock: 'lock',

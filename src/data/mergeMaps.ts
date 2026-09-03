@@ -1,3 +1,18 @@
+/**
+ * 地图分组元数据（瓦片路径、投影、图层、标注等），来自 tarkov-dev 仓库的 maps.json，
+ * 由 `npm run update-maps` 拉取。
+ *
+ * 注意它是 mergeMaps 的**驱动方**：下面按 maps.json 的分组遍历，再用 normalizedName
+ * 去 maps-api.json 里取业务数据。所以只存在于 maps-api.json、在这里没有对应分组
+ * （也不在任何 altMaps 里）的地图会被静默丢掉——因为没有瓦片元数据本来也画不出来。
+ *
+ * 两个文件的条目数不相等是正常的，别看到 15 对 17 就以为漏了数据：
+ * 当前 15 个分组 + 3 个 altMaps（ground-zero-21 / night-factory / the-lab-dark）
+ * 共渲染 16 张图，被丢掉的只有 ground-zero-tutorial（教程关，撤离点和转移点都是 0）。
+ *
+ * 但 tarkov.dev 真的新增一张可玩地图时，光更新 maps-api.json 是不够的，
+ * 必须同时更新 maps.json（跑一次 `npm run update-maps` 会一起更新），否则新图不会出现。
+ */
 import mapsMeta from '@/data/maps.json';
 
 export interface ApiMap {
@@ -14,6 +29,8 @@ export interface ApiMap {
   bosses?: InteractiveMap.Boss[];
   spawns?: InteractiveMap.Spawn[];
   extracts?: InteractiveMap.Extract[];
+  /** 地图间转移点；合并时会并入 extracts，faction 为 transit。 */
+  transits?: InteractiveMap.Extract[];
   locks?: InteractiveMap.Lock[];
   hazards?: InteractiveMap.Hazard[];
   lootContainers?: InteractiveMap.LootContainer[];
@@ -74,23 +91,29 @@ const SKIP_GROUPS = new Set(['transits', 'openworld']);
 
 const normalizeFaction = (faction?: string | null): InteractiveMap.Faction => {
   const value = (faction || '').toLowerCase();
+  if (value.includes('transit') || value.includes('transfer')) return 'transit';
   if (value.includes('scav')) return 'scav';
   if (value.includes('shared') || value.includes('all') || value === 'any') return 'shared';
   if (value.includes('pmc') || value === 'usec' || value === 'bear') return 'pmc';
   return 'shared';
 };
 
+const normalizeExtract = (extract: InteractiveMap.Extract): InteractiveMap.Extract => ({
+  ...extract,
+  faction: normalizeFaction(extract.faction),
+  switches: extract.switches || [],
+  outline: extract.outline || [],
+});
+
 const buildMap = (
   group: MapGroupMeta,
   image: MapImageMeta,
   api?: ApiMap,
 ): InteractiveMap.Data => {
-  const extracts = (api?.extracts || []).map((extract) => ({
-    ...extract,
-    faction: normalizeFaction(extract.faction),
-    switches: extract.switches || [],
-    outline: extract.outline || [],
-  }));
+  const extracts = [
+    ...(api?.extracts || []).map(normalizeExtract),
+    ...(api?.transits || []).map((t) => normalizeExtract({ ...t, faction: 'transit' })),
+  ];
 
   return {
     id: api?.id || image.key,

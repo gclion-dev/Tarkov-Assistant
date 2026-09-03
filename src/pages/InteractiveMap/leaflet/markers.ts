@@ -25,6 +25,7 @@ const EXTRACT_COLOR: Record<string, string> = {
   pmc: '#88ff00',
   scav: '#ff8800',
   shared: '#00ccff',
+  transit: '#ff4444',
 };
 
 const markerIcon = (src: string, extraClass = '') => {

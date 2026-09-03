@@ -27,6 +27,7 @@ const Index = (props: ExtractsProps & InteractiveMap.UtilProps) => {
             pmc: '#88ff00',
             scav: '#ff8800',
             shared: '#00ccff',
+            transit: '#ff4444',
           };
           const extractHeight = extract.position.y;
           let active = true;

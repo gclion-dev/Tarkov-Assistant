@@ -59,7 +59,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   activeLayerName: undefined,
   activeLayerMapId: undefined,
 
-  extracts: ['pmc', 'scav', 'shared'],
+  extracts: ['pmc', 'scav', 'shared', 'transit'],
   locks: ['lock'],
   lootKeys: ['safe', 'jacket', 'pc-block', 'cache', 'medcase', 'plastic-suitcase'],
   spawns: ['scav', 'sniper_scav', 'boss'],

@@ -258,7 +258,7 @@ declare namespace InteractiveMap {
     additional_info: any[];
   }
 
-  type Faction = 'pmc' | 'scav' | 'shared';
+  type Faction = 'pmc' | 'scav' | 'shared' | 'transit';
 
   type MapStatus = 'loaded' | 'loading' | 'failed';
 
