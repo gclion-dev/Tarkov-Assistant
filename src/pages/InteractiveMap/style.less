@@ -49,6 +49,12 @@
     max-width: 50%;
     gap: 16px;
   }
+  // 底栏子元素默认被拉伸成整列宽，账户入口需要显式贴右。
+  &-right {
+    .account-entry {
+      align-self: flex-end;
+    }
+  }
 }
 
 .im-loading {
@@ -104,7 +110,11 @@
         transform-origin: bottom left;
       }
       &-right {
-        display: none !important;
+        // 极窄屏原本整块隐藏，现在账户入口住在这里，
+        // 所以只隐藏标尺/坐标读数，保留登录入口。
+        > *:not(.account-entry) {
+          display: none !important;
+        }
       }
     }
   }

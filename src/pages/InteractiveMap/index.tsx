@@ -808,7 +808,6 @@ const Index = () => {
                 {resolution.width > 1280 && <Coordinate position={cursorPosition} />}
               </div>
               <div className="im-header-right-2">
-                <AccountEntry />
                 <AdditionFunc />
               </div>
             </div>
@@ -829,6 +828,8 @@ const Index = () => {
             <div className="im-footer-right">
               <RulerPosition rulerPosition={rulerPosition} />
               {resolution.width <= 1280 && <Coordinate position={cursorPosition} />}
+              {/* 账户入口放在最底部，紧贴右下角，不跟随上方读数的显示/隐藏而跳动。 */}
+              <AccountEntry />
             </div>
           </div>
         </div>
