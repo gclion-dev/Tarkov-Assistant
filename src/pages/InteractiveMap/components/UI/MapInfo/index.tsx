@@ -129,6 +129,12 @@ const Index = (props: MapInfoProps) => {
           </span>
         </div>
       )}
+      {raidInfo?.location && (
+        <div className="im-mapinfo-item">
+          <span className="im-mapinfo-item-title">地图</span>
+          <span>{raidInfo.location}</span>
+        </div>
+      )}
       {raidInfo?.gameMode && raidInfo?.raidMode && (
         <div className="im-mapinfo-item">
           <span className="im-mapinfo-item-title">游戏模式</span>

@@ -155,7 +155,7 @@ const Index = () => {
   const [lang] = useRecoilState(langState);
 
   const { user } = useAuth();
-  const { room, reportLocation } = useRoom();
+  const { room, reportLocation, setRoomMap } = useRoom();
   const { ownMarks, removeMark } = useMapMarks();
   const [selfLocation, setSelfLocation] = useState<PlayerLocation>();
   const [routePlan, setRoutePlan] = useState<GeneratedRoutePlan | null>(null);
@@ -172,16 +172,29 @@ const Index = () => {
 
   const { t } = useI18N(lang);
 
-  /** 切图时必须一并清掉楼层，否则楼层会串到新地图上。 */
+  const isRoomHost = !!room && !!user && room.hostId === user.id;
+  const roomMapId = room?.mapId;
+
+  /** 切图时必须一并清掉楼层，否则楼层会串到新地图上。房主切图会同步给房间里其他人。 */
   const switchMap = useCallback(
     (mapId?: string) => {
       if (!mapId) {
         return;
       }
       patch({ activeMapId: mapId, activeLayerName: undefined, activeLayerMapId: undefined });
+      if (isRoomHost && roomMapId !== mapId) {
+        setRoomMap(mapId);
+      }
     },
-    [patch],
+    [patch, isRoomHost, roomMapId, setRoomMap],
   );
+
+  useEffect(() => {
+    if (!roomMapId) {
+      return;
+    }
+    switchMap(roomMapId);
+  }, [roomMapId, switchMap]);
 
   const handleLocationUpdate = useCallback(
     (location: PlayerLocation) => {
@@ -249,7 +262,11 @@ const Index = () => {
 
   const parseRaidInfo = (log: InteractiveMap.RaidLogProps) => {
     setRaidInfo(log);
-    toast.info(`载入战局信息: ${log.shortId}`);
+    toast.info(
+      log.raidMode === 'Local'
+        ? `载入本地战局: ${log.location} (${log.shortId})`
+        : `载入战局信息: ${log.shortId}`,
+    );
     const matched = mapList.find((map) => map.nameId === log.location);
     if (matched) {
       switchMap(matched.id);

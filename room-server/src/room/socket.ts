@@ -8,12 +8,17 @@ import {
   addMark,
   clearMarks,
   createRoom,
+  dissolveRoom,
   findRoomByUserId,
   joinRoom,
+  kickMember,
   leaveRoom,
   leaveSocket,
   removeMark,
   roomToSync,
+  setRoomMap,
+  sweepStaleMembers,
+  transferHost,
   updateLocation,
 } from './manager.js';
 
@@ -37,6 +42,9 @@ const roomIdSchema = z.object({
     .trim()
     .length(6, '房间号为 6 位')
     .regex(/^[A-Za-z0-9]+$/, '房间号只能包含字母和数字'),
+  // 客户端断线 / 刷新后自动重连时置为 true，用来和用户主动点「加入房间」区分开，
+  // 只有主动加入才能覆盖掉被踢出的记录。
+  auto: z.boolean().optional(),
 });
 
 // 位置数据会被广播给同房间的其他客户端并直接进入 leaflet 渲染，
@@ -61,6 +69,18 @@ const markIdSchema = z.object({ id: z.string().min(1).max(64) });
 
 const clearMarksSchema = z.object({ mapId: z.string().min(1).max(64).optional() });
 
+const createRoomSchema = z.object({
+  mapId: z.string().min(1).max(64).optional(),
+});
+
+const setMapSchema = z.object({
+  mapId: z.string().min(1).max(64),
+});
+
+const targetUserSchema = z.object({
+  userId: z.string().min(1).max(128),
+});
+
 const QUOTA_WINDOW_MS = 10 * 1000;
 
 const getData = (socket: Socket) => socket.data as SocketData;
@@ -74,12 +94,32 @@ let ioRef: Server | null = null;
 /**
  * 断开某个账号的全部连接。管理员停用账号或强制下线时调用。
  *
- * 不需要在这里手动清理房间：断开会触发各 socket 自己的 disconnect 处理，
- * 那里已经有「最后一个连接断开才算离开房间」并广播房间状态的逻辑。
+ * 必须先把人从房间里拿掉：普通断线有重连宽限，管理员踢人不能让对方再以「刷新」的名义坐回来。
  */
 export const disconnectUserSockets = (userId: string, message: string) => {
   if (!ioRef) {
     return 0;
+  }
+  const room = findRoomByUserId(userId);
+  if (room) {
+    const result = leaveRoom(room.id, userId);
+    Array.from(ioRef.sockets.sockets.values()).forEach((item) => {
+      const itemData = item.data as SocketData;
+      if (itemData.userId !== userId) {
+        return;
+      }
+      if (itemData.roomId === room.id) {
+        itemData.roomId = undefined;
+      }
+      item.leave(room.id);
+      // 这几个连接马上就要被强制断开了，必须在断开前主动告知客户端清空本地房间状态，
+      // 否则「io server disconnect」不会自动重连，界面会一直停留在已经不存在的房间里，
+      // 直到用户手动刷新页面。
+      item.emit('room:detached', { roomId: room.id });
+    });
+    if (result.removed && result.room) {
+      ioRef.to(room.id).emit('room:state', roomToSync(result.room));
+    }
   }
   const sockets = Array.from(ioRef.sockets.sockets.values()).filter(
     (item) => (item.data as SocketData).userId === userId,
@@ -145,16 +185,40 @@ export const setupRoomSocket = (io: Server) => {
   };
 
   /** 把该账号的所有连接都移出房间，并通知其他标签页同步清空本地房间状态。 */
-  const detachAccount = (userId: string, roomId: string, originSocketId: string) => {
+  const detachAccount = (userId: string, roomId: string, originSocketId?: string) => {
     socketsOfUser(userId).forEach((item) => {
       const itemData = item.data as SocketData;
       if (itemData.roomId === roomId) {
         itemData.roomId = undefined;
       }
       item.leave(roomId);
-      if (item.id !== originSocketId) {
+      if (!originSocketId || item.id !== originSocketId) {
         item.emit('room:detached', { roomId });
       }
+    });
+  };
+
+  /** 踢人：该账号所有连接都收到 kicked，不再走 detached，避免重复清状态。 */
+  const kickAccount = (userId: string, roomId: string) => {
+    socketsOfUser(userId).forEach((item) => {
+      const itemData = item.data as SocketData;
+      if (itemData.roomId === roomId) {
+        itemData.roomId = undefined;
+      }
+      item.leave(roomId);
+      item.emit('room:kicked', { roomId });
+    });
+  };
+
+  /** 解散：通知该账号所有连接房间已不存在。 */
+  const dissolveAccount = (userId: string, roomId: string) => {
+    socketsOfUser(userId).forEach((item) => {
+      const itemData = item.data as SocketData;
+      if (itemData.roomId === roomId) {
+        itemData.roomId = undefined;
+      }
+      item.leave(roomId);
+      item.emit('room:dissolved', { roomId });
     });
   };
 
@@ -198,14 +262,16 @@ export const setupRoomSocket = (io: Server) => {
 
     socket.on(
       'room:create',
-      handle<{ roomId: string; room: SyncedRoom }>(socket, (_payload, ack) => {
+      handle<{ roomId: string; room: SyncedRoom }>(socket, (payload, ack) => {
         // 一个账号同时只在一个房间里。离开旧房间时必须通知旧房间的其他人，
         // 否则他们的成员列表里会残留一个永远不会消失的幽灵成员。
         const existing = findRoomByUserId(data.userId);
         if (existing) {
           leaveCurrentRoom(socket, existing.id);
         }
-        const room = createRoom(data.userId, data.nickname, socket.id);
+        const parsed = createRoomSchema.safeParse(payload ?? {});
+        const mapId = parsed.success ? parsed.data.mapId : undefined;
+        const room = createRoom(data.userId, data.nickname, socket.id, mapId);
         data.roomId = room.id;
         socket.join(room.id);
         ack?.({ ok: true, data: { roomId: room.id, room: roomToSync(room) } });
@@ -225,7 +291,13 @@ export const setupRoomSocket = (io: Server) => {
         // 先尝试加入，成功后才离开旧房间。
         // 反过来做的话，输错房间号或目标房间已满都会把人从当前房间里踢出去。
         const existing = findRoomByUserId(data.userId);
-        const result = joinRoom(targetId, data.userId, data.nickname, socket.id);
+        const result = joinRoom(
+          targetId,
+          data.userId,
+          data.nickname,
+          socket.id,
+          parsed.data.auto,
+        );
         if ('error' in result) {
           ack?.({ ok: false, error: result.error });
           return;
@@ -247,6 +319,98 @@ export const setupRoomSocket = (io: Server) => {
         if (data.roomId) {
           leaveCurrentRoom(socket, data.roomId);
         }
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    socket.on(
+      'room:setMap',
+      handle<null>(socket, (payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const parsed = setMapSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack?.({ ok: false, error: parsed.error.issues[0]?.message || '地图数据不合法' });
+          return;
+        }
+        const result = setRoomMap(roomId, data.userId, parsed.data.mapId);
+        if ('error' in result) {
+          ack?.({ ok: false, error: result.error });
+          return;
+        }
+        if (!result.unchanged) {
+          emitState(roomId, roomToSync(result.room));
+        }
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    socket.on(
+      'room:transfer',
+      handle<null>(socket, (payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const parsed = targetUserSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack?.({ ok: false, error: '目标用户不合法' });
+          return;
+        }
+        const result = transferHost(roomId, data.userId, parsed.data.userId);
+        if ('error' in result) {
+          ack?.({ ok: false, error: result.error });
+          return;
+        }
+        emitState(roomId, roomToSync(result.room));
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    socket.on(
+      'room:kick',
+      handle<null>(socket, (payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const parsed = targetUserSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack?.({ ok: false, error: '目标用户不合法' });
+          return;
+        }
+        const result = kickMember(roomId, data.userId, parsed.data.userId);
+        if ('error' in result) {
+          ack?.({ ok: false, error: result.error });
+          return;
+        }
+        kickAccount(result.kickedUserId, result.roomId);
+        if (result.room) {
+          emitState(result.roomId, roomToSync(result.room));
+        }
+        ack?.({ ok: true, data: null });
+      }),
+    );
+
+    socket.on(
+      'room:dissolve',
+      handle<null>(socket, (_payload, ack) => {
+        const roomId = data.roomId;
+        if (!roomId) {
+          ack?.({ ok: false, error: '尚未加入房间' });
+          return;
+        }
+        const result = dissolveRoom(roomId, data.userId);
+        if ('error' in result) {
+          ack?.({ ok: false, error: result.error });
+          return;
+        }
+        result.memberIds.forEach((userId) => dissolveAccount(userId, result.roomId));
         ack?.({ ok: true, data: null });
       }),
     );
@@ -363,8 +527,9 @@ export const setupRoomSocket = (io: Server) => {
         }
         data.roomId = undefined;
         // 只摘掉当前这一个连接：同一账号的其他标签页仍在房间里时不应该被踢出。
+        // 最后一个连接断开时进入重连宽限，人还留在房间里，由定时扫把真正移除。
         const result = leaveSocket(roomId, data.userId, socket.id);
-        if (result.removed && result.room) {
+        if ((result.removed || result.wentOffline) && result.room) {
           emitState(roomId, roomToSync(result.room));
         }
       } catch (err) {
@@ -372,4 +537,21 @@ export const setupRoomSocket = (io: Server) => {
       }
     });
   });
+
+  const sweepTimer = setInterval(() => {
+    try {
+      const changed = sweepStaleMembers(config.room.reconnectGraceMs);
+      changed.forEach(({ roomId, room }) => {
+        // room 为 null 表示房间里的人全被清空了，而这只可能发生在所有连接
+        // 早就断开之后——没有任何客户端还挂在这个 socket.io room 里等着收广播，
+        // 发 room:dissolved 也不会有人收到，不需要白白发一次。
+        if (room) {
+          emitState(roomId, room);
+        }
+      });
+    } catch (err) {
+      console.error('[socket] 清理断线成员失败：', err);
+    }
+  }, 5000);
+  sweepTimer.unref();
 };

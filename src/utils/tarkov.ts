@@ -185,39 +185,79 @@ export const tarkovGamePathResolve = {
     logs.push(buffer);
     return logs;
   },
+  /**
+   * PVE / 旧版角色选择行。
+   * 新版客户端本地选角写的是 Prepare/CompleteSelectedProfile，不再是 SelectProfile。
+   */
   parseProfileLine: (text: string): InteractiveMap.ProfileLogProps | null => {
-    const regexp = /SelectProfile ProfileId:(.+?) AccountId:(.+)/i;
+    const regexp =
+      /(?:SelectProfile|PrepareSelectedProfileLocally|CompleteSelectedProfile)\s+ProfileId:(.+?)\s+AccountId:(.+)/i;
     const result = text.match(regexp);
     if (result) {
       return {
         profileId: result[1],
         accountId: result[2]?.trim(),
       };
-    } else {
-      return null;
     }
+    return null;
   },
-  parseRaidLine: (text: string): InteractiveMap.RaidLogProps | null => {
-    const regexp = /'Profileid: (.+?), Status: (.+?), RaidMode: (.+?), Ip: (.+?), Port: (.+?), Location: (.+?), Sid: (.+?), GameMode: (.+?), shortId: (.+?)'/i;
+  /**
+   * PVE 在线：TRACE-NetworkGameCreate profileStatus 里的联机战局字段。
+   * PVP / PVPS 同格式，目前一并能解析，后续若要隔离再按 Session mode 过滤。
+   */
+  parsePveOnlineRaidLine: (text: string): InteractiveMap.RaidLogProps | null => {
+    const regexp =
+      /'Profileid: (.+?), Status: (.+?), RaidMode: (.+?), Ip: (.+?), Port: (.+?), Location: (.+?), Sid: (.+?), GameMode: (.+?), shortId: (.+?)'/i;
     const sidRegexp = /(.+?)-(.+?)_(.+)/i;
     const result = text.match(regexp);
-    if (result) {
-      const sidResult = result[7].match(sidRegexp);
-      return {
-        profileId: result[1],
-        status: result[2],
-        raidMode: result[3],
-        ip: result[4],
-        port: result[5],
-        location: result[6],
-        sid: result[7],
-        gameMode: result[8],
-        shortId: result[9],
-        realTime: sidResult && sidResult[3],
-      };
-    } else {
+    if (!result) {
       return null;
     }
+    const sidResult = result[7].match(sidRegexp);
+    return {
+      profileId: result[1],
+      status: result[2],
+      raidMode: result[3],
+      ip: result[4],
+      port: result[5],
+      location: result[6],
+      sid: result[7],
+      gameMode: result[8],
+      shortId: result[9],
+      realTime: sidResult && sidResult[3],
+    };
+  },
+  /**
+   * PVE 本地：没有 IP/shortId，靠 [Transit] Flag:Common 拿 RaidId + Locations。
+   * 注意不要匹配联机后的 `[Transit] \`profileId\` Count:...` 行。
+   */
+  parsePveLocalRaidLine: (text: string): InteractiveMap.RaidLogProps | null => {
+    const regexp =
+      /\[Transit\]\s+Flag:Common,\s*RaidId:([0-9a-f]+),\s*Count:\d+,\s*Locations:([A-Za-z0-9_]+)/i;
+    const result = text.match(regexp);
+    if (!result) {
+      return null;
+    }
+    const raidId = result[1];
+    return {
+      profileId: '',
+      status: 'Local',
+      raidMode: 'Local',
+      ip: '',
+      port: '',
+      location: result[2],
+      sid: raidId,
+      gameMode: 'pve',
+      shortId: raidId,
+      realTime: null,
+    };
+  },
+  /** 优先在线战局行，否则回退 PVE 本地 Transit。 */
+  parseRaidLine: (text: string): InteractiveMap.RaidLogProps | null => {
+    return (
+      tarkovGamePathResolve.parsePveOnlineRaidLine(text) ||
+      tarkovGamePathResolve.parsePveLocalRaidLine(text)
+    );
   },
   parseUserConfirmedLine: (text: string): InteractiveMap.UserConfirmedLogProps | null => {
     const regexp = /Got notification \| UserConfirmed/i;

@@ -5,8 +5,12 @@ import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { getErrorMessage } from '@/features/auth/services/http';
 import {
   createRoom as createRoomApi,
+  dissolveRoom as dissolveRoomApi,
   joinRoom as joinRoomApi,
+  kickRoomMember as kickRoomMemberApi,
   leaveRoom as leaveRoomApi,
+  setRoomMap as setRoomMapApi,
+  transferRoomHost as transferRoomHostApi,
   updateRoomLocation,
 } from '@/features/room/services/roomSocket';
 import type { PlayerLocation } from '@/features/room/types';
@@ -24,10 +28,10 @@ const useRoom = () => {
   const setState = useSetRecoilState(roomState);
   const lastSentAtRef = useRef(0);
 
-  const createRoom = useCallback(async () => {
+  const createRoom = useCallback(async (mapId?: string) => {
     setState((prev) => ({ ...prev, pending: true, error: null }));
     try {
-      const { roomId, room } = await createRoomApi();
+      const { roomId, room } = await createRoomApi(mapId);
       setState((prev) => ({ ...prev, pending: false, room, desiredRoomId: roomId, error: null }));
       return roomId;
     } catch (err) {
@@ -68,6 +72,26 @@ const useRoom = () => {
     }
   }, [setState]);
 
+  const setRoomMap = useCallback((mapId: string) => {
+    setRoomMapApi(mapId).catch(() => undefined);
+  }, []);
+
+  const transferHost = useCallback(async (userId: string) => {
+    await transferRoomHostApi(userId);
+  }, []);
+
+  const kickMember = useCallback(async (userId: string) => {
+    await kickRoomMemberApi(userId);
+  }, []);
+
+  const dissolveRoom = useCallback(async () => {
+    try {
+      await dissolveRoomApi();
+    } finally {
+      setState((prev) => ({ ...initialRoomState, connected: prev.connected }));
+    }
+  }, [setState]);
+
   /**
    * 上报自己的位置：先本地乐观更新（自己的箭头必须实时跟手），
    * 再按节流间隔发给服务端。
@@ -104,6 +128,10 @@ const useRoom = () => {
     createRoom,
     joinRoom,
     leaveRoom,
+    setRoomMap,
+    transferHost,
+    kickMember,
+    dissolveRoom,
     reportLocation,
   };
 };

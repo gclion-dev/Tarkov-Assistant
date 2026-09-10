@@ -5,6 +5,7 @@ import { useRecoilState } from 'recoil';
 
 import useAuth from '@/features/auth/hooks/useAuth';
 import { refreshAccessToken } from '@/features/auth/services/http';
+import { loadDesiredRoomId, saveDesiredRoomId } from '@/features/room/services/roomPersist';
 import {
   addRoomMark,
   connectRoomSocket,
@@ -14,6 +15,8 @@ import {
   reconnectRoomSocket,
 } from '@/features/room/services/roomSocket';
 import type { LocationUpdatedPayload, RoomState } from '@/features/room/types';
+import useI18N from '@/i18n';
+import langState from '@/store/lang';
 import mapMarkState from '@/store/mapMarkState';
 import roomState, { initialRoomState } from '@/store/roomState';
 
@@ -27,7 +30,9 @@ import roomState, { initialRoomState } from '@/store/roomState';
 const RoomProvider = ({ children }: { children: ReactNode }) => {
   // 只依赖登录态：access token 每 30 分钟会刷新一次，但 socket 握手时会通过
   // tokenStore 现取最新值，没必要因为换 token 就重建监听。
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const [lang] = useRecoilState(langState);
+  const { t } = useI18N(lang);
   const [state, setState] = useRecoilState(roomState);
   const [ownMarks] = useRecoilState(mapMarkState);
 
@@ -38,16 +43,36 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
   // 事件回调在 React 渲染周期之外执行，用 ref 读取最新的期望房间号。
   const desiredRoomIdRef = useRef(state.desiredRoomId);
   desiredRoomIdRef.current = state.desiredRoomId;
+  const userIdRef = useRef(user?.id);
+  userIdRef.current = user?.id;
+  const tRef = useRef(t);
+  tRef.current = t;
+  const restoredRoomRef = useRef(false);
 
   /** 因鉴权失败而刷新 token 重连的次数，避免 token 确实失效时无限重连。 */
   const authRetryRef = useRef(0);
 
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !userId) {
       disconnectRoomSocket();
       setState(initialRoomState);
+      restoredRoomRef.current = false;
       return undefined;
     }
+
+    const storedRoomId = loadDesiredRoomId(userId);
+    if (storedRoomId) {
+      desiredRoomIdRef.current = storedRoomId;
+      setState((prev) => {
+        if (prev.desiredRoomId === storedRoomId) {
+          return prev;
+        }
+        return { ...prev, desiredRoomId: storedRoomId };
+      });
+    }
+    restoredRoomRef.current = true;
 
     const socket = connectRoomSocket();
 
@@ -55,9 +80,11 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
       authRetryRef.current = 0;
       setState((prev) => ({ ...prev, connected: true, error: null }));
       // 断线重连后自动回到原来的房间，否则一次网络抖动就等于被静默踢出协作。
+      // auto: true 让服务端知道这不是用户主动点的加入，命中「被踢出」记录时会被拒绝，
+      // 不会让一次自动重连悄悄撤销房主的踢人操作。
       const roomId = desiredRoomIdRef.current;
       if (roomId) {
-        joinRoom(roomId)
+        joinRoom(roomId, { auto: true })
           .then((room) => {
             setState((prev) => ({ ...prev, room, desiredRoomId: room.id, error: null }));
           })
@@ -93,9 +120,21 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribers = [
       // 成员变动一律由服务端下发完整状态，避免增量事件漏发导致的幽灵成员。
       onRoomEvent<RoomState>('room:state', (room) => {
-        setState((prev) => ({ ...prev, room, desiredRoomId: room.id, error: null }));
+        setState((prev) => {
+          const selfId = userIdRef.current;
+          if (
+            selfId
+            && prev.room
+            && prev.room.hostId !== room.hostId
+            && room.hostId === selfId
+            && prev.room.hostId !== selfId
+          ) {
+            toast.info(tRef.current('room.becameHost'));
+          }
+          return { ...prev, room, desiredRoomId: room.id, error: null };
+        });
       }),
-      onRoomEvent<LocationUpdatedPayload>('location:updated', ({ userId, location }) => {
+      onRoomEvent<LocationUpdatedPayload>('location:updated', ({ userId: memberId, location }) => {
         setState((prev) => {
           if (!prev.room) {
             return prev;
@@ -105,7 +144,7 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
             room: {
               ...prev.room,
               members: prev.room.members.map((member) =>
-                (member.userId === userId ? { ...member, location } : member)),
+                (member.userId === memberId ? { ...member, location } : member)),
             },
           };
         });
@@ -113,6 +152,14 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
       // 同一账号在别处切换了房间，本标签页需要同步清空。
       onRoomEvent<{ roomId: string }>('room:detached', () => {
         setState((prev) => ({ ...prev, room: null, desiredRoomId: null }));
+      }),
+      onRoomEvent<{ roomId: string }>('room:kicked', () => {
+        setState((prev) => ({ ...prev, room: null, desiredRoomId: null }));
+        toast.info(tRef.current('room.kicked'));
+      }),
+      onRoomEvent<{ roomId: string }>('room:dissolved', () => {
+        setState((prev) => ({ ...prev, room: null, desiredRoomId: null }));
+        toast.info(tRef.current('room.dissolved'));
       }),
       onRoomEvent<{ message: string }>('room:error', ({ message }) => {
         setState((prev) => ({ ...prev, error: message }));
@@ -133,7 +180,15 @@ const RoomProvider = ({ children }: { children: ReactNode }) => {
       socket.off('connect_error', onConnectError);
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [isAuthenticated, setState]);
+  }, [isAuthenticated, userId, setState]);
+
+  useEffect(() => {
+    if (!userId || !restoredRoomRef.current) {
+      return;
+    }
+    // 用 ref：同一个 tick 里恢复房间号时 React state 还没提交，直接写 state 会把 localStorage 清掉。
+    saveDesiredRoomId(userId, desiredRoomIdRef.current);
+  }, [userId, state.desiredRoomId]);
 
   /**
    * 进入房间（含断线重连后重新加入）时把已有的本地标记推上去。

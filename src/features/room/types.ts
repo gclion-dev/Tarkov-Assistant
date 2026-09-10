@@ -34,6 +34,11 @@ export interface RoomMember {
   userId: string;
   nickname: string;
   color: string;
+  /**
+   * 是否当前有连接。断线宽限期内仍算在房间里，此时为 false。
+   * 老版本服务端不会下发这个字段，读取方必须容忍 undefined。
+   */
+  connected?: boolean;
   location?: PlayerLocation;
   /** 老版本服务端不会下发这个字段，读取方必须容忍 undefined。 */
   marks?: MapMark[];
@@ -42,6 +47,8 @@ export interface RoomMember {
 export interface RoomState {
   id: string;
   hostId: string;
+  /** 房主选定的地图。加入者与房主切图时都跟这份走。 */
+  mapId?: string;
   members: RoomMember[];
 }
 

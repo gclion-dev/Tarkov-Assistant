@@ -173,6 +173,8 @@ export const config = {
   room: {
     maxMembers: readInt(process.env.ROOM_MAX_MEMBERS, 6),
     ttlMs: readInt(process.env.ROOM_TTL_MS, 4 * 60 * 60 * 1000),
+    // 最后一个连接断开后，成员仍留在房间里等待重连的宽限。覆盖 F5 刷新与短暂掉线。
+    reconnectGraceMs: readInt(process.env.ROOM_RECONNECT_GRACE_MS, 60 * 1000),
     // 服务端兜底节流：单个连接上报位置的最小间隔。
     locationMinIntervalMs: readInt(process.env.ROOM_LOCATION_MIN_INTERVAL_MS, 200),
     // 单个连接每 10 秒允许的事件总数，超出即断开。

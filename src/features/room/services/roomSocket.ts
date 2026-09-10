@@ -94,10 +94,18 @@ const emitWithAck = <T>(event: string, payload?: unknown) =>
     }
   });
 
-export const createRoom = () => emitWithAck<{ roomId: string; room: RoomState }>('room:create');
+export const createRoom = (mapId?: string) =>
+  emitWithAck<{ roomId: string; room: RoomState }>('room:create', mapId ? { mapId } : {});
 
-export const joinRoom = (roomId: string) =>
-  emitWithAck<{ room: RoomState }>('room:join', { roomId }).then((res) => res.room);
+/**
+ * auto 用来区分「用户主动点加入」和「断线/刷新后自动重连回原房间」。
+ * 后者如果命中了被踢出的记录会被服务端拒绝，前者（手动重新输入房间号）则始终允许，
+ * 这样「踢出」才是真的把人挪出去，而不会被自动重连悄悄撤销。
+ */
+export const joinRoom = (roomId: string, options?: { auto?: boolean }) =>
+  emitWithAck<{ room: RoomState }>('room:join', { roomId, auto: !!options?.auto }).then(
+    (res) => res.room,
+  );
 
 export const leaveRoom = async () => {
   const instance = getSocket();
@@ -106,6 +114,21 @@ export const leaveRoom = async () => {
   }
   await emitWithAck<null>('room:leave');
 };
+
+export const setRoomMap = (mapId: string) => {
+  if (!getSocket().connected) {
+    return Promise.resolve();
+  }
+  return emitWithAck<null>('room:setMap', { mapId }).then(() => undefined);
+};
+
+export const transferRoomHost = (userId: string) =>
+  emitWithAck<null>('room:transfer', { userId }).then(() => undefined);
+
+export const kickRoomMember = (userId: string) =>
+  emitWithAck<null>('room:kick', { userId }).then(() => undefined);
+
+export const dissolveRoom = () => emitWithAck<null>('room:dissolve').then(() => undefined);
 
 export const updateRoomLocation = (location: PlayerLocation) => {
   const instance = getSocket();

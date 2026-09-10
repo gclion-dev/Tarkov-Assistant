@@ -41,7 +41,7 @@
     position: absolute;
     bottom: calc(100% + 12px);
     left: 0;
-    width: 280px;
+    width: 300px;
     padding: 16px;
     border: 3px solid #2c2c2c;
     border-radius: 8px;
@@ -142,6 +142,9 @@
     &.self {
       color: #ffffff;
     }
+    &.offline {
+      opacity: 0.65;
+    }
     &-dot {
       flex: none;
       width: 8px;
@@ -150,19 +153,69 @@
     }
     // 昵称最长 20 字符，超出时截断，避免撑破面板布局
     &-name {
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    &-offline {
+      flex: none;
+      font-size: 10px;
+      color: #ffe66d;
+    }
+    &-actions {
+      display: flex;
+      flex: none;
+      gap: 4px;
+    }
   }
 
   &-host {
-    margin-left: auto;
+    flex: none;
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 10px;
     color: #888888;
     background-color: #2c2c2c;
+  }
+
+  &-action {
+    padding: 1px 6px;
+    border: 1px solid #2c2c2c;
+    border-radius: 4px;
+    color: #888888;
+    font-size: 11px;
+    background: none;
+    cursor: pointer;
+    &:hover {
+      color: #ffffff;
+      border-color: #888888;
+    }
+    &-danger {
+      &:hover {
+        color: #ff6b6b;
+        border-color: #ff6b6b;
+      }
+    }
+  }
+
+  &-confirm {
+    padding: 8px;
+    border: 1px solid #2c2c2c;
+    border-radius: 4px;
+    background-color: #121212;
+    p {
+      margin: 0 0 8px;
+      color: #cccccc;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    &-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
   }
 
   &-leave {
