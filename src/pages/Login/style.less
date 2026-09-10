@@ -62,9 +62,12 @@
   font-size: 12px;
 }
 
-/* 全局 .button 带有 margin: 0 12px，配合 width: 100% 会让按钮整体右移并溢出表单，
-   这里显式清掉左右外边距，让它和上方输入框严格对齐。 */
-.auth-submit {
+/* 全局 .button 带有 margin: 0 12px，配合 width: 100% 会让按钮整体右移并溢出表单。
+   单独用 .auth-submit（单一类选择器）覆盖时，和 .button 的选择器优先级相同，
+   实际生效的一方取决于两份样式在最终产物里的加载顺序，并不可靠——
+   这里用 .button.auth-submit 把优先级提高一级，确保稳定覆盖掉外边距，
+   让按钮和上方输入框严格对齐（登录 / 注册共用同一个按钮，一并修复）。 */
+.button.auth-submit {
   width: 100%;
   margin: 8px 0 0;
   box-sizing: border-box;
