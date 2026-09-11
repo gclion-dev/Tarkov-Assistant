@@ -89,6 +89,8 @@ interface DrawStroke {
   layer: L.Polyline;
 }
 
+const FLASH_MS = 2400;
+
 const Index = (props: LeafletMapProps) => {
   const {
     mapData,
@@ -146,6 +148,12 @@ const Index = (props: LeafletMapProps) => {
   const markLayerRef = useRef<L.LayerGroup>();
   const marksRef = useRef(marks);
   const onMarkRemoveRef = useRef(onMarkRemove);
+  const flashUntilRef = useRef(0);
+  const flashTimerRef = useRef<number>();
+  const teammateLocSigRef = useRef('');
+  const teammateReadyRef = useRef(false);
+  const teammateMapIdRef = useRef(mapData.id);
+  const startPlayerFlashRef = useRef<() => void>(() => undefined);
 
   onCursorRef.current = onCursorPositionChange;
   onRulerRef.current = onRulerPositionChange;
@@ -226,17 +234,25 @@ const Index = (props: LeafletMapProps) => {
       });
     });
 
+    const flashing = Date.now() < flashUntilRef.current;
+    const flashClass = flashing ? ' is-flashing' : '';
+
     entries.forEach(({ label, color, location, isSelf }) => {
       const rotation = getMarkerRotation(location.quaternion);
       // 昵称是其他玩家填写的不可信内容，拼进 innerHTML 前必须转义。
       const safeLabel = escapeHtml(label);
       L.marker(pos(location), {
         icon: L.divIcon({
-          className: 'im-leaflet-player',
+          className: `im-leaflet-player${flashClass}`,
           html:
+            `<div class="im-leaflet-player-body" style="--player-color:${color}">` +
+            '<div class="im-leaflet-player-mark">' +
+            '<div class="im-leaflet-player-fx" aria-hidden="true"><i></i><i></i><i></i></div>' +
             '<div class="im-leaflet-player-arrow" ' +
             `style="transform:rotate(${rotation}deg);border-bottom-color:${color}"></div>` +
-            `<span style="color:${color}">${safeLabel}</span>`,
+            '</div>' +
+            `<span style="color:${color}">${safeLabel}</span>` +
+            '</div>',
           iconSize: [24, 24],
           iconAnchor: [12, 24],
         }),
@@ -244,6 +260,22 @@ const Index = (props: LeafletMapProps) => {
       }).addTo(layer);
     });
   };
+
+  /**
+   * 截图定位后给当前地图上每一个人的箭头播一遍高亮，方便快速找到人。
+   */
+  const startPlayerFlash = () => {
+    flashUntilRef.current = Date.now() + FLASH_MS;
+    if (flashTimerRef.current) {
+      window.clearTimeout(flashTimerRef.current);
+    }
+    renderPlayerMarkers();
+    flashTimerRef.current = window.setTimeout(() => {
+      flashTimerRef.current = undefined;
+      renderPlayerMarkers();
+    }, FLASH_MS);
+  };
+  startPlayerFlashRef.current = startPlayerFlash;
 
   /**
    * 坐标标记的唯一渲染入口。
@@ -595,7 +627,7 @@ const Index = (props: LeafletMapProps) => {
       // 交给父组件保存并按节流上报；本地标记由 selfLocation 驱动统一渲染。
       onLocationUpdateRef.current?.(location);
       selfLocationRef.current = location;
-      renderPlayerMarkers();
+      startPlayerFlashRef.current();
 
       if (locationScaleRef.current) {
         map.setView(pos(parsed), Math.min(map.getMaxZoom(), map.getZoom() + 1), { animate: true });
@@ -606,6 +638,10 @@ const Index = (props: LeafletMapProps) => {
 
     return () => {
       (window as any).interactUpdateLocation = undefined;
+      if (flashTimerRef.current) {
+        window.clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = undefined;
+      }
       map.remove();
       mapRef.current = undefined;
       svgOverlayRef.current = undefined;
@@ -615,6 +651,41 @@ const Index = (props: LeafletMapProps) => {
   }, [mapData.id, mapData.key]);
 
   useEffect(() => {
+    const currentMapId = mapData.id;
+    const selfId = selfUserId;
+    const parts: string[] = [];
+    (roomMembers || []).forEach((member) => {
+      if (selfId && member.userId === selfId) {
+        return;
+      }
+      if (!member.location || member.location.mapId !== currentMapId) {
+        return;
+      }
+      parts.push(`${member.userId}:${member.location.updatedAt}`);
+    });
+    const sig = parts.sort().join('|');
+    const mapChanged = teammateMapIdRef.current !== currentMapId;
+    teammateMapIdRef.current = currentMapId;
+
+    if (mapChanged) {
+      teammateLocSigRef.current = sig;
+      teammateReadyRef.current = true;
+      renderPlayerMarkers();
+      return;
+    }
+
+    const isInitial = !teammateReadyRef.current;
+    teammateReadyRef.current = true;
+    if (sig !== teammateLocSigRef.current) {
+      const prevParts = teammateLocSigRef.current.split('|').filter(Boolean);
+      const prevSet = new Set(prevParts);
+      const addedOrUpdated = parts.some((part) => !prevSet.has(part));
+      teammateLocSigRef.current = sig;
+      if (!isInitial && addedOrUpdated) {
+        startPlayerFlash();
+        return;
+      }
+    }
     renderPlayerMarkers();
   }, [roomMembers, selfLocation, mapData.id]);
 

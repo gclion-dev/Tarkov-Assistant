@@ -34,6 +34,10 @@
   .leaflet-marker-icon.off-level {
     pointer-events: none;
   }
+
+  .leaflet-marker-pane {
+    overflow: visible;
+  }
 }
 
 .im-leaflet-marker {
@@ -77,18 +81,51 @@
 }
 
 .im-leaflet-player {
+  overflow: visible !important;
   background: transparent;
   border: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  &-body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  // 三角箭头的占位盒。波纹必须锚在这里，不能锚在整颗标记底部（否则圆心会落到名字上）。
+  &-mark {
+    position: relative;
+    width: 12px;
+    height: 16px;
+    margin-bottom: 4px;
+    transform-origin: 50% 50%;
+  }
+  &-fx {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    i {
+      position: absolute;
+      left: 0;
+      top: 0;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
   span {
+    position: relative;
+    z-index: 1;
     color: #00ff00;
     font-size: 12px;
     text-shadow: 0 0 6px #000;
     white-space: nowrap;
   }
   &-arrow {
+    position: relative;
+    z-index: 1;
     width: 0;
     height: 0;
     border-left: 6px solid transparent;
@@ -96,7 +133,49 @@
     border-bottom: 16px solid #00ff00;
     filter: drop-shadow(0 0 2px #000);
     transform-origin: 50% 100%;
-    margin-bottom: 4px;
+  }
+
+  // 波纹从三角箭头的几何中心往外扩，名字不参与圆心计算。
+  &.is-flashing {
+    .im-leaflet-player-fx i {
+      width: 18px;
+      height: 18px;
+      margin: -9px 0 0 -9px;
+      border: 2px solid var(--player-color, #00ff88);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--player-color, #00ff88);
+      animation: im-player-ripple 1.2s ease-out 2;
+    }
+    .im-leaflet-player-fx i:nth-child(2) {
+      animation-delay: 0.4s;
+    }
+    .im-leaflet-player-fx i:nth-child(3) {
+      animation-delay: 0.8s;
+    }
+    .im-leaflet-player-mark {
+      animation: im-player-pop 0.6s ease-out 2;
+    }
+  }
+}
+
+@keyframes im-player-ripple {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(8);
+    opacity: 0;
+  }
+}
+
+@keyframes im-player-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
   }
 }
 
