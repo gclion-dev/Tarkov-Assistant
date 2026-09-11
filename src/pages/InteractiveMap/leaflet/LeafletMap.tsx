@@ -15,6 +15,7 @@ import { escapeHtml } from '@/utils/html';
 import { parseLocationFromFilename, quaternionToEulerAngles } from '@/utils/tarkov';
 
 import { showContextMenu } from '@/pages/InteractiveMap/components/UI/ContextMenu';
+import { getIconCDN } from '@/pages/InteractiveMap/utils';
 
 import { gameLatLng, getBounds, getCRS, getScaledBounds, pos } from './crs';
 import {
@@ -80,6 +81,21 @@ interface MarkEntry {
   isSelf: boolean;
 }
 
+const MARK_ICON_SRC = getIconCDN('map-mark');
+const MARK_ICON_SIZE = 32;
+/** 靶心在 128×128 图里约 (57, 63)，换算到 32×32 后作为锚点，让标记对准点击坐标。 */
+const MARK_ICON_ANCHOR: [number, number] = [14, 16];
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+const markIconHtml = (color: string, title: string) => {
+  const safeColor = HEX_COLOR.test(color) ? color : DEFAULT_SELF_COLOR;
+  return (
+    `<div class="im-leaflet-mark-shape" title="${title}" style="--mark-color:${safeColor}">` +
+    `<img src="${MARK_ICON_SRC}" alt="" />` +
+    '</div>'
+  );
+};
+
 interface DrawStroke {
   id: string;
   tool: 'draw' | 'eraser';
@@ -132,6 +148,7 @@ const Index = (props: LeafletMapProps) => {
   const drawingRef = useRef<{ points: L.LatLng[]; layer?: L.Polyline }>();
   const rulerRef = useRef<{ start?: L.LatLng; line?: L.Polyline; marks?: L.Layer[] }>({});
   const playerLayerRef = useRef<L.LayerGroup>();
+  const markLinkLayerRef = useRef<L.LayerGroup>();
   const moveKeysRef = useRef<Set<string>>(new Set());
   const onCursorRef = useRef(onCursorPositionChange);
   const onRulerRef = useRef(onRulerPositionChange);
@@ -199,6 +216,62 @@ const Index = (props: LeafletMapProps) => {
   };
 
   /**
+   * 靶标 ↔ 放置者当前位置的虚线。
+   *
+   * 没有位置（还没定位到）就不画，避免悬空线段。自己的起点用本地位置，
+   * 队友的用房间下发的那一份。连线在图标之下，避免盖住靶心和箭头。
+   */
+  const renderMarkLinks = () => {
+    const layer = markLinkLayerRef.current;
+    if (!layer) {
+      return;
+    }
+    layer.clearLayers();
+
+    const currentMapId = mapDataRef.current.id;
+    const selfId = selfUserIdRef.current;
+    const selfColor = getSelfColor();
+    const ownLoc = selfLocationRef.current;
+
+    const addLink = (from: { x: number; z: number }, to: { x: number; z: number }, color: string) => {
+      const safeColor = HEX_COLOR.test(color) ? color : DEFAULT_SELF_COLOR;
+      L.polyline([pos(from), pos(to)], {
+        color: safeColor,
+        weight: 2,
+        dashArray: '7 6',
+        opacity: 0.8,
+        interactive: false,
+        className: 'im-leaflet-mark-link',
+      }).addTo(layer);
+    };
+
+    if (ownLoc && ownLoc.mapId === currentMapId) {
+      (marksRef.current || []).forEach((mark) => {
+        if (mark.mapId !== currentMapId) {
+          return;
+        }
+        addLink(ownLoc, mark, selfColor);
+      });
+    }
+
+    (roomMembersRef.current || []).forEach((member) => {
+      if (selfId && member.userId === selfId) {
+        return;
+      }
+      const loc = member.location;
+      if (!loc || loc.mapId !== currentMapId) {
+        return;
+      }
+      (member.marks || []).forEach((mark) => {
+        if (mark.mapId !== currentMapId) {
+          return;
+        }
+        addLink(loc, mark, member.color);
+      });
+    });
+  };
+
+  /**
    * 玩家标记的唯一渲染入口。
    * 自己和队友走同一条路径，避免此前「在房间 / 不在房间」两套逻辑各自复制一份旋转计算，
    * 也避免退出房间瞬间自己的标记消失。
@@ -259,6 +332,8 @@ const Index = (props: LeafletMapProps) => {
         zIndexOffset: isSelf ? 1000 : 900,
       }).addTo(layer);
     });
+    // 位置变了，靶标连线的起点也要跟着走。
+    renderMarkLinks();
   };
 
   /**
@@ -280,8 +355,8 @@ const Index = (props: LeafletMapProps) => {
   /**
    * 坐标标记的唯一渲染入口。
    *
-   * 形状是菱形 + 中心点，和玩家箭头刻意不同；颜色则与同一个人的箭头完全一致，
-   * 这样房间里既能看出「哪个标记是谁打的」，也不会把标记误认成某人的位置。
+   * 形状是靶子插箭，和玩家箭头刻意不同；外发光颜色与同一个人的箭头一致，
+   * 再加一条同色虚线连到该玩家当前位置，避免房间里把别人的靶标认成自己的。
    */
   const renderMarks = () => {
     const layer = markLayerRef.current;
@@ -320,13 +395,10 @@ const Index = (props: LeafletMapProps) => {
       const marker = L.marker(pos(mark), {
         icon: L.divIcon({
           className: 'im-leaflet-mark',
-          html:
-            `<div class="im-leaflet-mark-shape" title="${title}" style="border-color:${color}">` +
-            `<i style="background-color:${color}"></i>` +
-            '</div>',
-          iconSize: [18, 18],
-          // 标记指向一个精确坐标，锚点取正中而不是底边。
-          iconAnchor: [9, 9],
+          html: markIconHtml(color, title),
+          iconSize: [MARK_ICON_SIZE, MARK_ICON_SIZE],
+          // 锚点取靶心，而不是图标外接矩形的中心（箭杆会把矩形往右上拉开）。
+          iconAnchor: MARK_ICON_ANCHOR,
         }),
         // 只有自己的标记可点，避免误删别人的（服务端也只允许删自己的）。
         interactive: isSelf,
@@ -337,6 +409,7 @@ const Index = (props: LeafletMapProps) => {
         marker.on('click', () => onMarkRemoveRef.current?.(mark.id));
       }
     });
+    renderMarkLinks();
   };
 
   const heightRange = useMemo(() => {
@@ -503,7 +576,8 @@ const Index = (props: LeafletMapProps) => {
     }
 
     drawPaneRef.current = L.layerGroup().addTo(map);
-    // 标记层在玩家层之下：位置箭头永远压在标记上面。
+    // 连线 < 靶标 < 玩家箭头，避免虚线盖住图标。
+    markLinkLayerRef.current = L.layerGroup().addTo(map);
     markLayerRef.current = L.layerGroup().addTo(map);
     playerLayerRef.current = L.layerGroup().addTo(map);
 

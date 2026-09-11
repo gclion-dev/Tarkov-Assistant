@@ -72,15 +72,12 @@ const Index = () => {
     const result = addMark({ mapId: payload.mapId, ...payload.position });
     if (!result.ok) {
       message.show({ content: t('contextMenu.markLimit').replace('{n}', `${MAX_MAP_MARKS}`) });
-      return;
     }
-    message.show({ content: t('contextMenu.markAdded') });
   };
 
   const handleClear = () => {
     setShow(false);
     clearMarks(payload.mapId);
-    message.show({ content: t('contextMenu.marksCleared') });
   };
 
   return (

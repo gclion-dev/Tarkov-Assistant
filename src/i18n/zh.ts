@@ -36,8 +36,6 @@ export default {
   contextMenu: {
     markPosition: '标记当前坐标',
     clearMarks: '清空我的标记',
-    markAdded: '已标记',
-    marksCleared: '已清空标记',
     markLimit: '每张地图最多只能标记 {n} 个坐标',
     removeHint: '点击标记可删除',
     empty: '此处没有可用操作',
