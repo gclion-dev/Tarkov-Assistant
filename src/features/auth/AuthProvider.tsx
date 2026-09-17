@@ -35,13 +35,19 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [setState]);
 
   useEffect(() => {
-    // React.StrictMode 下 effect 会执行两次，用 ref 保证只恢复一次会话。
+    // React.StrictMode 下 effect 会执行两次（挂载 → 清理 → 再挂载），
+    // 用 ref 保证 restore() 只真正调用一次，避免并发打两次 /api/auth/refresh。
+    //
+    // 这里刻意不用「cancelled 标志 + 清理函数置位」那套惯用模式：
+    // StrictMode 的第一次挂载会立刻触发一次清理，若用清理函数把 cancelled 置为
+    // true，等 restore() 的 Promise 真正 resolve 时状态更新就会被那个早已过期的
+    // cancelled 挡掉——而 bootstrappedRef 又不允许重新发起一次 restore() 来补上，
+    // 于是 isLoading 会永远卡在 true（本组件是应用生命周期内的单例 Provider，
+    // 不会被真正卸载，不需要为「卸载后不再 setState」这件事担心）。
     if (bootstrappedRef.current) {
       return;
     }
     bootstrappedRef.current = true;
-
-    let cancelled = false;
 
     const restore = async () => {
       // 客户端壳注入的 token 优先（window.clientAccessToken 由外部客户端提供）。
@@ -50,9 +56,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         setAccessToken(injected);
         try {
           const { user } = await authApi.me();
-          if (!cancelled) {
-            setState({ user, accessToken: getAccessToken(), isLoading: false });
-          }
+          setState({ user, accessToken: getAccessToken(), isLoading: false });
           return;
         } catch {
           setAccessToken(null);
@@ -61,20 +65,13 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         const session = await authApi.refresh();
         setAccessToken(session.accessToken);
-        if (!cancelled) {
-          setState({ user: session.user, accessToken: session.accessToken, isLoading: false });
-        }
+        setState({ user: session.user, accessToken: session.accessToken, isLoading: false });
       } catch {
-        if (!cancelled) {
-          setState({ user: null, accessToken: null, isLoading: false });
-        }
+        setState({ user: null, accessToken: null, isLoading: false });
       }
     };
 
     restore();
-    return () => {
-      cancelled = true;
-    };
   }, [setState]);
 
   return <>{children}</>;
