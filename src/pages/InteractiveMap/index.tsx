@@ -155,13 +155,17 @@ const Index = () => {
   const [lang] = useRecoilState(langState);
 
   const { user } = useAuth();
-  const { room, reportLocation, setRoomMap } = useRoom();
+  const { room, connected, reportLocation, setRoomMap } = useRoom();
   const { ownMarks, removeMark } = useMapMarks();
   const [selfLocation, setSelfLocation] = useState<PlayerLocation>();
   const [routePlan, setRoutePlan] = useState<GeneratedRoutePlan | null>(null);
   const [routePlanId, setRoutePlanId] = useState('');
 
   const directoryFilesCache = useRef<string[]>([]);
+  const selfLocationRef = useRef(selfLocation);
+  selfLocationRef.current = selfLocation;
+  /** 已经为哪个房间补推过当前位置，避免同一房间内重复打位置上报。 */
+  const syncedLocationRoomIdRef = useRef<string | null>(null);
 
   /**
    * 最近一次提示过的地图 id。
@@ -206,6 +210,30 @@ const Index = () => {
     },
     [room, user, reportLocation],
   );
+
+  /**
+   * 进入房间（含断线重连）时把当前已有的定位补推上去。
+   *
+   * 截图目录只在出现新文件时才回调，进房前已经解析出的位置不会再发一次。
+   * 标记在 RoomProvider 里有同样的补推；位置不补的话，后进房的人本地看得到
+   * 自己，房主却看不到他的箭头。
+   */
+  useEffect(() => {
+    const roomId = room?.id ?? null;
+    const userId = user?.id;
+    if (!roomId || !connected || !userId) {
+      syncedLocationRoomIdRef.current = null;
+      return;
+    }
+    if (syncedLocationRoomIdRef.current === roomId) {
+      return;
+    }
+    syncedLocationRoomIdRef.current = roomId;
+    const loc = selfLocationRef.current;
+    if (loc) {
+      reportLocation(loc, userId, { force: true });
+    }
+  }, [room?.id, connected, user?.id, reportLocation]);
 
   const resolveDirectories = async (initial = false) => {
     if (initial) {

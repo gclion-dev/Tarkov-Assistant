@@ -95,9 +95,12 @@ const useRoom = () => {
   /**
    * 上报自己的位置：先本地乐观更新（自己的箭头必须实时跟手），
    * 再按节流间隔发给服务端。
+   *
+   * force 用于进房 / 重连补推：截图目录只在出现新文件时才回调，
+   * 不补推的话队友进房后本地已经有的定位永远发不出去。
    */
   const reportLocation = useCallback(
-    (location: PlayerLocation, userId: string) => {
+    (location: PlayerLocation, userId: string, options?: { force?: boolean }) => {
       setState((prev) => {
         if (!prev.room) {
           return prev;
@@ -112,7 +115,7 @@ const useRoom = () => {
         };
       });
       const now = Date.now();
-      if (now - lastSentAtRef.current >= LOCATION_SEND_INTERVAL_MS) {
+      if (options?.force || now - lastSentAtRef.current >= LOCATION_SEND_INTERVAL_MS) {
         lastSentAtRef.current = now;
         updateRoomLocation(location);
       }
